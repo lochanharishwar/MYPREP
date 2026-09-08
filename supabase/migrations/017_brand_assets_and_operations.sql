@@ -1,0 +1,11 @@
+create or replace function public.record_brand_asset(p_workspace uuid,p_brand uuid,p_actor uuid,p_payload jsonb) returns uuid language plpgsql security definer set search_path=public as $$declare asset uuid;begin
+ if not exists(select 1 from memberships where workspace_id=p_workspace and user_id=p_actor and role='owner') or not brand_access_for_user(p_brand,p_actor) then raise exception 'Owner with brand access required';end if;
+ if p_payload->>'assetPath' not like p_workspace::text||'/'||p_brand::text||'/%' then raise exception 'Asset scope mismatch';end if;
+ insert into entities(workspace_id,brand_id,kind,payload) values(p_workspace,p_brand,'brand_asset',p_payload||jsonb_build_object('createdBy',p_actor)) returning id into asset;
+ insert into audit_log(workspace_id,brand_id,actor_id,action,resource_id) values(p_workspace,p_brand,p_actor,'brand.asset_pinned',asset);return asset;
+end$$;
+create or replace function public.operations_report(p_workspace uuid) returns jsonb language sql stable security definer set search_path=public as $$
+ select jsonb_build_object('observedAt',now(),'pendingOutbox',(select count(*) from workflow_outbox where data->>'workspaceId'=p_workspace::text and status='pending'),'deadLetters',(select count(*) from workflow_outbox where data->>'workspaceId'=p_workspace::text and dead_at is not null),'oldestPendingAt',(select min(created_at) from workflow_outbox where data->>'workspaceId'=p_workspace::text and status='pending'),'verifyingPosts',(select count(*) from entities where workspace_id=p_workspace and kind='schedule' and payload->>'status'='verifying'),'expiredAccounts',(select count(*) from entities where workspace_id=p_workspace and kind='connection' and payload->>'status'='expired'),'failedMediaJobs',(select count(*) from media_jobs where workspace_id=p_workspace and status='failed'),'activeMediaJobs',(select count(*) from media_jobs where workspace_id=p_workspace and status in ('queued','processing')),'lastMetricAt',(select max(created_at) from entities where workspace_id=p_workspace and kind='metrics'));
+$$;
+revoke all on function public.record_brand_asset(uuid,uuid,uuid,jsonb),public.operations_report(uuid) from public,anon,authenticated;
+grant execute on function public.record_brand_asset(uuid,uuid,uuid,jsonb),public.operations_report(uuid) to service_role;

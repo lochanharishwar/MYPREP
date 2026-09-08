@@ -1,0 +1,22 @@
+name: Release checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: npm ci
+      - run: python -m pip install --require-hashes -r services/processor/requirements.lock.txt
+      - run: python -m pip install pip-audit==2.9.0
+      - run: npm run check
+      # Promotion is separate: this job never receives production credentials.
