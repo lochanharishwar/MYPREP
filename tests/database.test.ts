@@ -53,6 +53,14 @@ beforeEach(async () => {
 });
 afterAll(() => pg.close());
 describe('database gates', () => {
+  it('preserves owner campaign freezes during stale worker progress updates',async()=>{
+    const id=await record('campaign',{status:'generating',frozen:false,budget:2});
+    await pg.query('update entities set campaign_frozen=true where id=$1',[id]);
+    await pg.query("update entities set payload='{\"status\":\"reviewing\",\"frozen\":false,\"budget\":2}' where id=$1",[id]);
+    expect((await pg.query<{v:boolean}>("select (payload->>'frozen')::boolean v from entities where id=$1",[id])).rows[0].v).toBe(true);
+    await pg.query('update entities set campaign_frozen=false where id=$1',[id]);
+    expect((await pg.query<{v:boolean}>("select (payload->>'frozen')::boolean v from entities where id=$1",[id])).rows[0].v).toBe(false);
+  });
   it('commits exactly one command result and outbox across retries', async () => {
     const key = crypto.randomUUID(),
       request = { idea: 'Fixture campaign' },

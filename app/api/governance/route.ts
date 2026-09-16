@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { scope, db, rpc, entity, updateEntity } from '@/lib/server/db';
+import { scope, db, rpc, entity } from '@/lib/server/db';
 import { boundedBytes } from '@/lib/server/http';
 import { assertRole } from '@/lib/domain';
 export const dynamic = 'force-dynamic';
@@ -178,10 +178,8 @@ export async function POST(request: Request) {
         s.workspaceId,
         'campaign',
       );
-      await updateEntity(c.id, {
-        ...c.payload,
-        frozen: z.boolean().parse(body.frozen),
-      });
+      const {error} = await db().from('entities').update({campaign_frozen:z.boolean().parse(body.frozen),updated_at:new Date().toISOString()}).eq('id',c.id).eq('workspace_id',s.workspaceId);
+      if(error) throw error;
     }
     if (action === 'retry-job') {
       const id = z.string().max(250).parse(body.id);
