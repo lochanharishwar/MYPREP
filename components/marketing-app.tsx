@@ -24,6 +24,8 @@ import {
 import { WorkspaceProvider, useWorkspace } from './workspace-provider';
 import { ResourcePaging } from './resource-paging';
 import { WorkspaceSettings } from './workspace-settings';
+import { ThinkingIndicator } from './thinking-indicator';
+import type { OrbState } from 'thinking-orbs';
 import {
   BrandView,
   ContentView,
@@ -64,16 +66,16 @@ export const nav = [
   },
 ];
 export const agents = [
-  { name: 'Website discovery', icon: ScanSearch },
-  { name: 'Brand DNA', icon: Dna },
-  { name: 'Content generation', icon: Sparkles },
-  { name: 'Content reviewer', icon: ShieldCheck },
-  { name: 'Scheduler', icon: CalendarDays },
-  { name: 'Audience feedback', icon: MessageCircle },
-  { name: 'Performance analyst', icon: ChartNoAxesCombined },
-  { name: 'Attribution', icon: Network },
-  { name: 'Customer insights', icon: Lightbulb },
-];
+  { name: 'Website discovery', icon: ScanSearch, orb: 'searching' },
+  { name: 'Brand DNA', icon: Dna, orb: 'weaving' },
+  { name: 'Content generation', icon: Sparkles, orb: 'composing' },
+  { name: 'Content reviewer', icon: ShieldCheck, orb: 'solving' },
+  { name: 'Scheduler', icon: CalendarDays, orb: 'connecting' },
+  { name: 'Audience feedback', icon: MessageCircle, orb: 'listening' },
+  { name: 'Performance analyst', icon: ChartNoAxesCombined, orb: 'working' },
+  { name: 'Attribution', icon: Network, orb: 'weaving' },
+  { name: 'Customer insights', icon: Lightbulb, orb: 'shaping' },
+] satisfies { name: string; icon: typeof ScanSearch; orb: OrbState }[];
 export function Empty({
   icon: Icon = Globe2,
   title,
@@ -103,10 +105,16 @@ function Dashboard() {
     error?: string;
     agent: number;
   }>('scan');
-  const campaign = w.records<{ status: string; agent: number }>('campaign')[0];
+  const campaign = w.records<{
+    status: string;
+    agent: number;
+    frozen?: boolean;
+  }>('campaign')[0];
   const scan = scans[0];
   const activeAgent =
-    campaign && ['generating', 'reviewing'].includes(campaign.payload.status)
+    campaign &&
+    !campaign.payload.frozen &&
+    ['generating', 'reviewing'].includes(campaign.payload.status)
       ? campaign.payload.agent
       : scan &&
           ['running', 'queued', 'building_dna'].includes(scan.payload.status)
@@ -187,7 +195,22 @@ function Dashboard() {
           <section className="panel">
             <div className="section-title">
               <h2>Website discovery</h2>
-              <span className="pill">{scan.payload.status}</span>
+              <output className="pill">
+                {['running', 'queued', 'building_dna'].includes(
+                  scan.payload.status,
+                ) && (
+                  <ThinkingIndicator
+                    state={
+                      scan.payload.status === 'building_dna'
+                        ? 'weaving'
+                        : scan.payload.status === 'queued'
+                          ? 'connecting'
+                          : 'searching'
+                    }
+                  />
+                )}
+                {scan.payload.status}
+              </output>
             </div>
             <div className="metric-grid">
               {[
@@ -256,6 +279,23 @@ function Dashboard() {
           <h3>Your agent team</h3>
           <span className="mono muted">09 AGENTS</span>
         </div>
+        <output className="agent-thinking">
+          <ThinkingIndicator
+            state={agents[activeAgent - 1]?.orb ?? 'breathing'}
+            size={64}
+            paused={!activeAgent}
+          />
+          <span>
+            <strong>
+              {agents[activeAgent - 1]?.name ?? 'Ready when you are'}
+            </strong>
+            <span className="muted small agent-thinking-copy">
+              {activeAgent
+                ? 'Working on your brand'
+                : 'Your team is on standby'}
+            </span>
+          </span>
+        </output>
         <div className="agent-list">
           {agents.map((a, i) => (
             <div
@@ -263,7 +303,11 @@ function Dashboard() {
               key={a.name}
             >
               <span className="agent-icon">
-                <a.icon size={16} />
+                {activeAgent === i + 1 ? (
+                  <ThinkingIndicator state={a.orb} />
+                ) : (
+                  <a.icon size={16} />
+                )}
               </span>
               <span className="agent-text">{a.name}</span>
               <small>{activeAgent === i + 1 ? 'Working' : 'Standby'}</small>

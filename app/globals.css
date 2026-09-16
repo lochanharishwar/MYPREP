@@ -427,6 +427,23 @@ p {
   display: grid;
   gap: 4px;
 }
+.agent-thinking {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 12px 0;
+}
+.agent-thinking > span {
+  min-width: 0;
+}
+.agent-thinking strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.agent-thinking-copy {
+  display: block;
+  margin: 4px 0 0;
+}
 .agent {
   display: flex;
   align-items: center;

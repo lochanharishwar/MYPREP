@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { BrandGovernance } from './brand-governance';
 import { PublicationResolution } from './publication-resolution';
 import { ContentRevision } from './content-revision';
+import { ThinkingIndicator } from './thinking-indicator';
 import { CustomerExport } from './customer-export';
 import Link from 'next/link';
 import {
@@ -511,6 +512,7 @@ export function ContentView() {
     error?: string;
     attempt?: number;
     agent?: number;
+    frozen?: boolean;
   }>('campaign');
   const connections = w.records<{
     platform: string;
@@ -679,6 +681,32 @@ export function ContentView() {
                       : ''}
                   </span>
                 </div>
+                {['queued', 'generating', 'reviewing'].includes(
+                  r.payload.status,
+                ) && (
+                  <output className="agent-thinking">
+                    <ThinkingIndicator
+                      state={
+                        r.payload.status === 'reviewing'
+                          ? 'solving'
+                          : r.payload.status === 'queued'
+                            ? 'connecting'
+                            : 'composing'
+                      }
+                      size={64}
+                      paused={!!r.payload.frozen}
+                    />
+                    <span className="muted small agent-thinking-copy">
+                      {r.payload.frozen
+                        ? 'Campaign frozen'
+                        : r.payload.status === 'reviewing'
+                          ? 'Reviewing finished content against your brand and platform requirements.'
+                          : r.payload.status === 'queued'
+                            ? 'Waiting to start your campaign.'
+                            : 'Creating content from your approved Brand DNA.'}
+                    </span>
+                  </output>
+                )}
                 {r.payload.error && <p className="notice">{r.payload.error}</p>}
               </article>
             ))}
