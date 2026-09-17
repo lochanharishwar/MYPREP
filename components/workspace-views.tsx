@@ -5,6 +5,7 @@
 /* oxlint-disable typescript/no-deprecated */
 import { useState } from 'react';
 import { BrandGovernance } from './brand-governance';
+import { PageInsights } from './page-insights';
 import { PublicationResolution } from './publication-resolution';
 import { ContentRevision } from './content-revision';
 import { ThinkingIndicator } from './thinking-indicator';
@@ -13,7 +14,6 @@ import Link from 'next/link';
 import {
   Dna,
   Globe2,
-  Search,
   Sparkles,
   Image as ImageIcon,
   Video,
@@ -73,7 +73,6 @@ import type {
   ContentVersion,
   Entity,
   Evidence,
-  Finding,
   Insight,
   MetricObservation,
   ScheduledPost,
@@ -289,19 +288,6 @@ export function DNACard({ compact = false }: { compact?: boolean }) {
 export function BrandView() {
   const w = useWorkspace(),
     dna = w.records<BrandDNA>('dna')[0]?.payload;
-  const [query, setQuery] = useState('');
-  const pages = w
-    .records<{
-      url: string;
-      summary: { summary?: string; insights?: Finding[]; seoIssues?: string[] };
-      screenshot?: string;
-      error?: string;
-    }>('page')
-    .filter(
-      (p) =>
-        !query ||
-        JSON.stringify(p.payload).toLowerCase().includes(query.toLowerCase()),
-    );
   return (
     <div className="stack">
       <DNACard />
@@ -429,58 +415,7 @@ export function BrandView() {
           </section>
         </>
       )}
-      <section className="panel">
-        <div className="section-title">
-          <h2>Every page. Its own perspective.</h2>
-          <span className="pill">{pages.length} pages</span>
-        </div>
-        <div className="scan-form">
-          <Search size={18} />
-          <input
-            aria-label="Search page insights"
-            placeholder="Search pages, topics, or SEO findings"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-        {pages.length ? (
-          <div className="two-col spaced">
-            {pages.map((p) => (
-              <article className="data-card" key={p.id}>
-                {p.payload.screenshot && (
-                  <img
-                    src={p.payload.screenshot}
-                    alt={`Screenshot of ${p.payload.url}`}
-                    loading="lazy"
-                  />
-                )}
-                <a
-                  href={p.payload.url}
-                  className="text-link small"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {p.payload.url}
-                </a>
-                <p>{p.payload.summary?.summary}</p>
-                {p.payload.summary?.insights?.map((f, i) => (
-                  <p key={i}>{f.text}</p>
-                ))}
-                {p.payload.summary?.seoIssues?.map((s, i) => (
-                  <p key={i}>SEO · {s}</p>
-                ))}
-                {p.payload.error && <p className="notice">{p.payload.error}</p>}
-              </article>
-            ))}
-          </div>
-        ) : (
-          <Empty
-            icon={Search}
-            title="Insights begin with the source"
-            description="Analyze a website to see individual page findings, supporting evidence, and practical recommendations."
-          />
-        )}
-      </section>
+      <PageInsights />
     </div>
   );
 }

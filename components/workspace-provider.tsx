@@ -43,7 +43,7 @@ interface Context {
     action: string,
     body: unknown,
   ) => Promise<T>;
-  read: <T>(path: string) => Promise<T>;
+  read: <T>(path: string, options?: { signal?: AbortSignal }) => Promise<T>;
   refresh: () => Promise<void>;
   settings: boolean;
   setSettings: (v: boolean) => void;
@@ -58,7 +58,6 @@ const resourcesByPath: Record<string, string[]> = {
   '/': ['dna', 'scan', 'activity', 'campaign', 'schedule', 'connection'],
   '/brand-dna': [
     'dna',
-    'page',
     'post_insight',
     'activity',
     'connection',
@@ -157,11 +156,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     };
   }, []);
   const read = useCallback(
-    async <T,>(url: string): Promise<T> => {
+    async <T,>(url: string, options?: { signal?: AbortSignal }): Promise<T> => {
       if (!client)
         throw new Error('Connect Supabase to access workspace data.');
       const { data } = await client.auth.getSession();
       const r = await fetch(url, {
+        signal: options?.signal
+          ? AbortSignal.any([options.signal, AbortSignal.timeout(30000)])
+          : AbortSignal.timeout(30000),
         headers: {
           Authorization: `Bearer ${data.session?.access_token ?? ''}`,
           ...(workspaceId ? { 'x-workspace-id': workspaceId } : {}),
@@ -290,9 +292,19 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           )
             void loadResources(
               resourcesByPath[path] ?? resourcesByPath['/'],
-            ).catch(() => {});
+            ).catch(() => {
+              if (active && requestedEpoch === epoch.current)
+                setNotice(
+                  'New activity is available, but the latest records could not be loaded. Refresh to retry.',
+                );
+            });
         })
-        .catch(() => {})
+        .catch(() => {
+          if (active && requestedEpoch === epoch.current)
+            setNotice(
+              'Live activity could not be refreshed. Displayed statuses may be out of date; the next refresh will retry.',
+            );
+        })
         .finally(() => {
           polling = false;
         });

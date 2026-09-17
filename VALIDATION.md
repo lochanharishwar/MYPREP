@@ -4,6 +4,8 @@ Updated 17 September 2026. The original assessment and `outputs/production-audit
 
 ## Local verification
 
+The subsequent full-stack completion stage adds server-side page search, stable pagination totals, resource-error redaction, settings submission guards and route recovery. Its release gate passed **61 application/API/database tests plus 13 Python tests**; see `docs/STAGE_VERIFICATION.md`, `docs/COMPLETION_CHECKLIST.md` and `docs/INTERACTION_INVENTORY.md` for current findings, browser evidence and remaining work. Migration 019 must be applied before activating the new page search on a hosted backend.
+
 The release gate is `npm run check`: TypeScript → lint → actual-migration/domain tests → Python tests → npm and Python dependency audits → production build. `.github/workflows/release.yml` runs the same gate without production secrets.
 
 Executed locally on 17 September 2026: **the complete release gate passed**, including **50 TypeScript/database tests and 13 Python tests**, type checking, lint and the production build. The full npm audit reported **0 vulnerabilities** and the locked Python audit reported **no known vulnerabilities**. The Cloudflare development-tool dependency group was updated together to remove the vulnerable transitive sharp version identified by [GHSA-rgj7-g3m4-5g8c](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c). The campaign-freeze regression proves that stale worker payloads cannot undo an owner's freeze; an explicit owner unfreeze still works. Nonblocking toolchain notices remain for the middleware convention, a future JSON import convention, a client chunk above 500 kB and Starlette's test-client HTTP library deprecation. These notices are not represented as eliminated.

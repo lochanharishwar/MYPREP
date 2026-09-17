@@ -1,7 +1,23 @@
 'use client';
+import { useRef, useState } from 'react';
 import { useWorkspace } from './workspace-provider';
 export function ResourcePaging() {
   const w = useWorkspace();
+  const [loading, setLoading] = useState('');
+  const pending = useRef(false);
+  async function more(kind: string) {
+    if (pending.current) return;
+    pending.current = true;
+    setLoading(kind);
+    try {
+      await w.loadMore(kind);
+    } catch (e) {
+      w.setNotice((e as Error).message);
+    } finally {
+      pending.current = false;
+      setLoading('');
+    }
+  }
   const groups = Object.entries(w.pages).filter(([, p]) => p.nextCursor);
   if (!groups.length) return null;
   return (
@@ -12,14 +28,10 @@ export function ResourcePaging() {
           <button
             className="secondary-btn"
             key={kind}
-            disabled={w.busy}
-            onClick={() =>
-              void w
-                .loadMore(kind)
-                .catch((e) => w.setNotice((e as Error).message))
-            }
+            disabled={w.busy || !!loading}
+            onClick={() => void more(kind)}
           >
-            More {kind.replaceAll('_', ' ')}
+            {loading === kind ? 'Loading' : 'More'} {kind.replaceAll('_', ' ')}
           </button>
         ))}
       </div>

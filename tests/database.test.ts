@@ -53,13 +53,136 @@ beforeEach(async () => {
 });
 afterAll(() => pg.close());
 describe('database gates', () => {
-  it('preserves owner campaign freezes during stale worker progress updates',async()=>{
-    const id=await record('campaign',{status:'generating',frozen:false,budget:2});
-    await pg.query('update entities set campaign_frozen=true where id=$1',[id]);
-    await pg.query("update entities set payload='{\"status\":\"reviewing\",\"frozen\":false,\"budget\":2}' where id=$1",[id]);
-    expect((await pg.query<{v:boolean}>("select (payload->>'frozen')::boolean v from entities where id=$1",[id])).rows[0].v).toBe(true);
-    await pg.query('update entities set campaign_frozen=false where id=$1',[id]);
-    expect((await pg.query<{v:boolean}>("select (payload->>'frozen')::boolean v from entities where id=$1",[id])).rows[0].v).toBe(false);
+  it('searches older pages with stable totals, literal terms and safe projections', async () => {
+    for (let i = 0; i < 30; i++)
+      await record('page', {
+        url: `https://example.com/${i}`,
+        summary: {
+          summary: `Campaign evidence ${i}`,
+          seoIssues: ['Missing description'],
+        },
+        html: '<div>do not transmit</div>',
+        markdown: 'raw crawl',
+        styles: { color: 'red' },
+      });
+    const exact = await record('page', {
+      url: 'https://example.com/offer',
+      summary: { summary: 'Discount 20%_safe' },
+    });
+    const search = async (
+      q = '',
+      at: string | null = null,
+      id: string | null = null,
+    ) =>
+      (
+        await pg.query<{
+          result: {
+            rows: {
+              id: string;
+              created_at: string;
+              payload: Record<string, unknown>;
+            }[];
+            total: number;
+            hasMore: boolean;
+          };
+        }>('select search_page_insights($1,$2,$3,10,$4,$5) result', [
+          workspace,
+          brand,
+          q,
+          at,
+          id,
+        ])
+      ).rows[0].result;
+    const first = await search('campaign');
+    expect(first.total).toBe(30);
+    expect(first.rows).toHaveLength(10);
+    expect(first.hasMore).toBe(true);
+    expect(first.rows[0].payload.html).toBeUndefined();
+    expect(first.rows[0].payload.markdown).toBeUndefined();
+    expect(first.rows[0].payload.styles).toBeUndefined();
+    const last = first.rows.at(-1)!;
+    const second = await search('campaign', last.created_at, last.id);
+    expect(second.total).toBe(30);
+    expect(
+      second.rows.every((r) => !first.rows.some((p) => p.id === r.id)),
+    ).toBe(true);
+    const end = second.rows.at(-1)!;
+    expect((await search('campaign', end.created_at, end.id)).hasMore).toBe(
+      false,
+    );
+    expect((await search('20%_')).rows.map((r) => r.id)).toEqual([exact]);
+    expect((await search('MISSING DESCRIPTION')).total).toBe(30);
+    expect((await search('no such finding')).total).toBe(0);
+  });
+  it('scopes page search to both workspace and brand and denies direct authenticated execution', async () => {
+    await record('page', {
+      url: 'https://example.com/private',
+      summary: { summary: 'private finding' },
+    });
+    const foreignBrand = (
+      await pg.query<{ id: string }>(
+        "insert into brands(workspace_id,name,website) values($1,'Other','https://other.example') returning id",
+        [workspace],
+      )
+    ).rows[0].id;
+    const result = await pg.query<{ value: { total: number } }>(
+      'select search_page_insights($1,$2) value',
+      [workspace, foreignBrand],
+    );
+    expect(result.rows[0].value.total).toBe(0);
+    expect(
+      (
+        await pg.query<{ value: { total: number } }>(
+          'select search_page_insights($1,$2) value',
+          [other, brand],
+        )
+      ).rows[0].value.total,
+    ).toBe(0);
+    await expect(
+      pg.query('select search_page_insights($1,$2,$3,101)', [
+        workspace,
+        brand,
+        '',
+      ]),
+    ).rejects.toThrow('Invalid page insight query');
+    await pg.exec('set role authenticated');
+    await expect(
+      pg.query('select search_page_insights($1,$2)', [workspace, brand]),
+    ).rejects.toThrow('permission denied');
+    await pg.exec('reset role');
+  });
+  it('preserves owner campaign freezes during stale worker progress updates', async () => {
+    const id = await record('campaign', {
+      status: 'generating',
+      frozen: false,
+      budget: 2,
+    });
+    await pg.query('update entities set campaign_frozen=true where id=$1', [
+      id,
+    ]);
+    await pg.query(
+      'update entities set payload=\'{"status":"reviewing","frozen":false,"budget":2}\' where id=$1',
+      [id],
+    );
+    expect(
+      (
+        await pg.query<{ v: boolean }>(
+          "select (payload->>'frozen')::boolean v from entities where id=$1",
+          [id],
+        )
+      ).rows[0].v,
+    ).toBe(true);
+    await pg.query('update entities set campaign_frozen=false where id=$1', [
+      id,
+    ]);
+    expect(
+      (
+        await pg.query<{ v: boolean }>(
+          "select (payload->>'frozen')::boolean v from entities where id=$1",
+          [id],
+        )
+      ).rows[0].v,
+    ).toBe(false);
   });
   it('commits exactly one command result and outbox across retries', async () => {
     const key = crypto.randomUUID(),

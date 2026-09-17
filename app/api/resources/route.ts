@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { db, scope } from '@/lib/server/db';
+import { db, scope, rpc } from '@/lib/server/db';
+import type { Entity } from '@/lib/contracts';
 const kinds = z.enum([
   'brand_asset',
   'connection',
@@ -49,9 +50,47 @@ export async function GET(request: Request) {
           )
       : null;
     if (cursor && selected.length !== 1)
-      throw new Error('Page one resource at a time.');
+      throw Object.assign(new Error('Page one resource at a time.'), {
+        status: 400,
+      });
+    const search = z
+      .string()
+      .trim()
+      .max(200)
+      .parse(params.get('q') ?? '');
+    if (search && (selected.length !== 1 || selected[0] !== 'page'))
+      throw Object.assign(
+        new Error('Search is supported for page insights only.'),
+        { status: 400 },
+      );
     const groups = await Promise.all(
       selected.map(async (kind) => {
+        if (kind === 'page') {
+          const result = await rpc<{
+            rows: Entity[];
+            total: number;
+            hasMore: boolean;
+          }>('search_page_insights', {
+            p_workspace: s.workspaceId,
+            p_brand: brandId,
+            p_query: search,
+            p_limit: limit,
+            p_after_at: cursor?.at ?? null,
+            p_after_id: cursor?.id ?? null,
+          });
+          const last = result.rows.at(-1);
+          return {
+            kind,
+            rows: result.rows,
+            total: result.total,
+            nextCursor:
+              result.hasMore && last
+                ? Buffer.from(
+                    JSON.stringify({ at: last.created_at, id: last.id }),
+                  ).toString('base64url')
+                : null,
+          };
+        }
         if (
           ['customers', 'accounts', 'feedback_summary'].includes(kind) &&
           !s.customerAccess
@@ -63,12 +102,14 @@ export async function GET(request: Request) {
             nextCursor: null,
             restricted: true,
           };
-        let q = db()
-          .from('entities')
-          .select('*', { count: 'exact' })
-          .eq('workspace_id', s.workspaceId)
-          .eq('brand_id', brandId)
-          .eq('kind', kind)
+        const base = () =>
+          db()
+            .from('entities')
+            .select('*', { count: 'exact' })
+            .eq('workspace_id', s.workspaceId)
+            .eq('brand_id', brandId)
+            .eq('kind', kind);
+        let q = base()
           .order('created_at', { ascending: false })
           .order('id', { ascending: false })
           .limit(kind === 'dna' ? 1 : limit);
@@ -80,21 +121,30 @@ export async function GET(request: Request) {
           );
         const { data, error, count } = await q;
         if (error) throw error;
+        let total = count ?? 0;
+        if (cursor) {
+          let countQuery = db()
+            .from('entities')
+            .select('id', { count: 'exact', head: true })
+            .eq('workspace_id', s.workspaceId)
+            .eq('brand_id', brandId)
+            .eq('kind', kind);
+          if (kind === 'content')
+            countQuery = countQuery.in('payload->>status', [
+              'qualified',
+              'approved',
+              'draft',
+            ]);
+          const counted = await countQuery;
+          if (counted.error) throw counted.error;
+          total = counted.count ?? 0;
+        }
         const rows = data ?? [];
-        if (kind === 'page')
-          for (const row of rows) {
-            row.payload = {
-              ...row.payload,
-              markdown: undefined,
-              html: undefined,
-              styles: undefined,
-            };
-          }
         const last = rows.at(-1);
         return {
           kind,
           rows,
-          total: count ?? 0,
+          total,
           nextCursor:
             last && rows.length === (kind === 'dna' ? 1 : limit)
               ? Buffer.from(
@@ -109,9 +159,30 @@ export async function GET(request: Request) {
       { headers: { 'Cache-Control': 'private,no-store' } },
     );
   } catch (e) {
+    const invalid = e instanceof z.ZodError || e instanceof SyntaxError;
+    const status = invalid ? 400 : ((e as { status?: number })?.status ?? 500);
+    const requestId = crypto.randomUUID();
+    if (status >= 500) console.error('resources_request_failed', { requestId });
     return Response.json(
-      { error: (e as Error).message },
-      { status: (e as Error & { status?: number }).status ?? 400 },
+      {
+        error: invalid
+          ? 'Invalid resource query. Check the filters and retry.'
+          : status >= 500
+            ? 'Page data is temporarily unavailable. Please retry.'
+            : (e as Error).message,
+        code:
+          status === 400
+            ? 'INVALID_QUERY'
+            : status === 401
+              ? 'UNAUTHENTICATED'
+              : status === 403
+                ? 'FORBIDDEN'
+                : status === 404
+                  ? 'NOT_FOUND'
+                  : 'UNAVAILABLE',
+        requestId,
+      },
+      { status, headers: { 'Cache-Control': 'private,no-store' } },
     );
   }
 }
