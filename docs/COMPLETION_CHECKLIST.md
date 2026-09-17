@@ -11,15 +11,17 @@ Updated 17 September 2026. This checklist distinguishes implementation, local ve
 - [x] Preserve role and assigned-brand authorization before the search RPC; restrict direct RPC execution to service_role.
 - [x] Prevent duplicate settings submissions and report sign-out failure rather than reloading as though it succeeded.
 - [x] Create interaction inventory, API contract, migration recovery and threat notes.
-- [x] Run migration/database and API regression tests; type checking, lint, production build and dependency audit: 61 application/API/database tests and 13 Python tests passed; both dependency audits clean.
+- [x] Run migration/database and API regression tests; type checking, lint, production build and dependency audit: 64 application/API/database tests and 13 Python tests passed; both dependency audits clean.
 - [x] Perform dedicated local responsive/browser verification of the available unconfigured shell; see STAGE_VERIFICATION.md for exact scope and limitations.
 - [x] Add missing-route recovery and generic render-error recovery; browser-verify the 404 return path.
 - [x] Add visible generic pagination loading and notices for failed live-status refreshes.
 - [ ] Verify authenticated hosted search after migration 019 and service setup. Native deployment receipts determine code-delivery status; deployment alone does not apply Supabase migrations.
 
+- [x] Add Reject/Disconnect confirmations and atomic owner-scoped disconnect; verify rollback, idempotency and stale-refresh prevention. See STAGE_VERIFICATION.md for isolated browser evidence.
+
 ## External activation — blocked
 
-- [ ] Supply and configure Supabase URL, public key and server-only service role; apply migrations 001–019 to staging, configure email/Google and redirect allowlist. No live project or credentials are available locally.
+- [ ] Supply and configure Supabase URL, public key and server-only service role; apply migrations 001–020 to staging, configure email/Google and redirect allowlist. No live project or credentials are available locally.
 - [ ] Configure Firecrawl, Browserless, Gemini image/video, Inngest, Cloud Run processor and encrypted social OAuth credentials; set owner budgets and provider tariffs before metered work.
 - [ ] Obtain required platform approvals and authorized test accounts; run each destination's actual publish/reconcile/metrics flow.
 - [ ] Select a callback-reachable origin/audience. Current private review access cannot be assumed reachable by webhooks, tracking, OAuth or durable workers. No sharing changes are made by this work.

@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { BrandGovernance } from './brand-governance';
 import { PageInsights } from './page-insights';
+import { ConfirmAction } from './confirm-action';
 import { PublicationResolution } from './publication-resolution';
 import { ContentRevision } from './content-revision';
 import { ThinkingIndicator } from './thinking-indicator';
@@ -706,17 +707,17 @@ export function ContentView() {
                   >
                     Redo
                   </button>
-                  <button
-                    className="secondary-btn"
+                  <ConfirmAction
+                    key={`${w.workspaceId}:${c.id}:reject`}
+                    label="Reject"
+                    title="Reject this content version?"
+                    description="This deletes the rejected content and its media, retaining only minimal operational audit information. This action cannot be undone."
+                    confirmLabel="Reject and delete"
                     disabled={w.busy}
-                    onClick={() =>
-                      void w
-                        .mutate('decision', { id: c.id, decision: 'reject' })
-                        .catch(() => {})
+                    onConfirm={() =>
+                      w.mutate('decision', { id: c.id, decision: 'reject' })
                     }
-                  >
-                    Reject
-                  </button>
+                  />
                 </div>
               </article>
             ))}

@@ -615,8 +615,11 @@ export async function POST(
         'connection',
       );
       if (body.disconnect) {
-        await db().from('credentials').delete().eq('entity_id', record.id);
-        await updateEntity(record.id, { ...record.payload, status: 'expired' });
+        await rpc('disconnect_connection', {
+          p_workspace: s.workspaceId,
+          p_id: record.id,
+          p_actor: s.user.id,
+        });
         return Response.json({ disconnected: true });
       }
       const destination = z.string().max(150).parse(body.destination);

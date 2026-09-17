@@ -53,6 +53,121 @@ beforeEach(async () => {
 });
 afterAll(() => pg.close());
 describe('database gates', () => {
+  it('disconnects credentials and account readiness atomically and audits once', async () => {
+    const id = await record('connection', {
+      platform: 'x',
+      status: 'connected',
+      name: 'Fixture',
+    });
+    await pg.query(
+      'insert into credentials(entity_id,encrypted) values($1,$2)',
+      [id, 'test-ciphertext'],
+    );
+    await pg.query('select claim_token_refresh($1,$2)', [id, owner]);
+    await pg.query('select disconnect_connection($1,$2,$3)', [
+      workspace,
+      id,
+      owner,
+    ]);
+    expect(
+      (await pg.query('select * from credentials where entity_id=$1', [id]))
+        .rows,
+    ).toHaveLength(0);
+    expect(
+      (
+        await pg.query<{ status: string }>(
+          "select payload->>'status' status from entities where id=$1",
+          [id],
+        )
+      ).rows[0].status,
+    ).toBe('expired');
+    expect(
+      (
+        await pg.query<{ ok: boolean }>(
+          'select finish_token_refresh($1,$2,0,$3) ok',
+          [id, owner, 'stale-token'],
+        )
+      ).rows[0].ok,
+    ).toBe(false);
+    await pg.query('select disconnect_connection($1,$2,$3)', [
+      workspace,
+      id,
+      owner,
+    ]);
+    expect(
+      (
+        await pg.query(
+          "select * from audit_log where resource_id=$1 and action='connection.disconnected'",
+          [id],
+        )
+      ).rows,
+    ).toHaveLength(1);
+  });
+  it('rolls credential deletion back if the account status write fails', async () => {
+    const id = await record('connection', { status: 'connected' });
+    await pg.query(
+      'insert into credentials(entity_id,encrypted) values($1,$2)',
+      [id, 'test-ciphertext'],
+    );
+    await pg.exec(
+      "create function test_disconnect_failure() returns trigger language plpgsql as $$begin if new.kind='connection' and new.payload->>'status'='expired' then raise exception 'injected failure';end if;return new;end$$; create trigger test_disconnect_failure before update on entities for each row execute function test_disconnect_failure();",
+    );
+    try {
+      await expect(
+        pg.query('select disconnect_connection($1,$2,$3)', [
+          workspace,
+          id,
+          owner,
+        ]),
+      ).rejects.toThrow('injected failure');
+      expect(
+        (await pg.query('select * from credentials where entity_id=$1', [id]))
+          .rows,
+      ).toHaveLength(1);
+      expect(
+        (
+          await pg.query<{ status: string }>(
+            "select payload->>'status' status from entities where id=$1",
+            [id],
+          )
+        ).rows[0].status,
+      ).toBe('connected');
+    } finally {
+      await pg.exec(
+        'drop trigger test_disconnect_failure on entities; drop function test_disconnect_failure();',
+      );
+    }
+  });
+  it('denies non-owner and cross-workspace disconnects without changing credentials', async () => {
+    const id = await record('connection', { status: 'connected' });
+    await pg.query(
+      'insert into credentials(entity_id,encrypted) values($1,$2)',
+      [id, 'test-ciphertext'],
+    );
+    await expect(
+      pg.query('select disconnect_connection($1,$2,$3)', [
+        workspace,
+        id,
+        other,
+      ]),
+    ).rejects.toThrow('Owner required');
+    const foreign = (
+      await pg.query<{ id: string }>(
+        "insert into workspaces(name,monthly_limit) values('Foreign',10) returning id",
+      )
+    ).rows[0].id;
+    await pg.query(
+      "insert into memberships(workspace_id,user_id,role) values($1,$2,'owner')",
+      [foreign, owner],
+    );
+    await expect(
+      pg.query('select disconnect_connection($1,$2,$3)', [foreign, id, owner]),
+    ).rejects.toThrow('Connection not found');
+    expect(
+      (await pg.query('select * from credentials where entity_id=$1', [id]))
+        .rows,
+    ).toHaveLength(1);
+  });
   it('searches older pages with stable totals, literal terms and safe projections', async () => {
     for (let i = 0; i < 30; i++)
       await record('page', {

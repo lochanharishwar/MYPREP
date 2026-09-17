@@ -38,7 +38,7 @@ Verification key: **S** = source reviewed, implementation exists, populated/live
 | Content | Edit caption disclosure; textarea; original disclosure; submit review | Create and review separate content version | POST decision(edit) | E | Original approval remains separate; preserve text | T data rules; live Blocked |
 | Content | Approve; destination/stage selection; confirm | Bind approval to exact content/account/stage | POST decision(approve) | A | Reject wrong account/stage/version | T approval rules; live Blocked |
 | Content | Redo; feedback; confirm | New bounded run using correction feedback | POST decision(redo) | E | Budget/attempt error | T bounds; live Blocked |
-| Content | Reject | Delete rejected content/media with operational audit | POST decision(reject), Storage | A | Notice; partial deletion needs operational inspection | S / Blocked; destructive confirmation review remains |
+| Content | Reject | Delete rejected content/media with operational audit | POST decision(reject), Storage | A | Notice; partial deletion needs operational inspection | T/B simulated confirmation; live deletion Blocked |
 | Schedule | List/calendar tabs; platform filter | Change view/filter loaded schedules | Scoped resources | M | Empty state | S |
 | Schedule | Previous/next month; calendar event | Navigate month / open post editor | None until save | M | Empty days stay empty | S |
 | Schedule | Schedule content; approved version/account; date/time/timezone; save | Persist approved destination schedule and durable dispatch | POST schedule | E; exact approval | Validation; dialog preserved | T timezone/approval/idempotency |
@@ -73,7 +73,7 @@ Verification key: **S** = source reviewed, implementation exists, populated/live
 | Settings | Brand URL; Add brand | Persist normalized brand | POST brands | E | URL validation; input retained | S / Blocked |
 | Connections | Connect [Instagram/YouTube/X/LinkedIn/Reddit] | Begin validated OAuth with state | POST connect; callback | O | Missing setup/access restrictions displayed | S / Blocked all providers |
 | Connections | Destination/account settings; Save | Persist valid connected account settings | POST connection | O | Provider/validation notice | S / Blocked |
-| Connections | Disconnect | Remove/revoke connection as implemented | POST connection | O | Provider failure/action notice | S / Blocked |
+| Connections | Disconnect | Confirm; atomically remove local credentials and expire account (no upstream revocation) | POST connection | O | Pending guard; error retained for retry | T atomic SQL / B simulated confirmation; live Blocked |
 | Team | Invite email; role; Save invitation | Store expiring invitation | POST team | O | Owner-only/validation error | T database; live Blocked |
 | Governance | Member role, brand access/assignments, customer/export permissions, approval stages; Save | Persist bounded member privileges | /api/governance(member) | O | Invariant/access denial | T permissions; live Blocked |
 | Governance | Remove member / Transfer ownership; confirm/cancel | Offboard or atomically transfer ownership | /api/governance(member) | O | Preserve last-owner rule | T ownership; live Blocked |
@@ -89,4 +89,4 @@ Dedicated browser pass completed for the unconfigured shell: six mobile routes, 
 
 ## Audit findings still requiring follow-up
 
-Generic resource pagination now has a loading state and duplicate-click guard; failed background polling now shows a stale-status notice. Some destructive content/connection controls still need consistent user confirmation. Other endpoints expose raw error text and need the safe response contract used by resources. These are tracked findings, not claims that every interaction is complete.
+Generic resource pagination now has a loading state and duplicate-click guard; failed background polling now shows a stale-status notice. Reject and Disconnect now have confirmation, cancellation, pending guards and retryable error states; browser verification used simulated callbacks. Other endpoints expose raw error text and need the safe response contract used by resources. These are tracked findings, not claims that every interaction is complete.

@@ -19,6 +19,7 @@ import { useWorkspace } from './workspace-provider';
 import { platforms } from '@/lib/contracts';
 import { GovernancePanel } from './governance-panel';
 import { IdentityControls } from './identity-controls';
+import { ConfirmAction } from './confirm-action';
 export function WorkspaceSettings() {
   const w = useWorkspace();
   const [saving, setSaving] = useState(false);
@@ -370,21 +371,22 @@ export function WorkspaceSettings() {
                                 <button className="secondary-btn">Save</button>
                               </form>
                             )}
-                            <button
+                            <ConfirmAction
+                              key={`${w.workspaceId}:${c.id}:disconnect`}
+                              label="Disconnect"
                               className="text-link small"
-                              onClick={() =>
-                                void run(
-                                  () =>
-                                    w.mutate('connection', {
-                                      id: c.id,
-                                      disconnect: true,
-                                    }),
-                                  'Account disconnected.',
-                                )
-                              }
-                            >
-                              Disconnect
-                            </button>
+                              title={`Disconnect ${c.payload.name}?`}
+                              description="This removes the saved credentials for this account. Published posts remain live, and uploads already dispatched may still finish. Reconnect the account before scheduling new publications."
+                              confirmLabel="Disconnect account"
+                              disabled={w.busy || saving}
+                              onConfirm={async () => {
+                                await w.mutate('connection', {
+                                  id: c.id,
+                                  disconnect: true,
+                                });
+                                setMessage('Account disconnected.');
+                              }}
+                            />
                           </div>
                         ))}
                     </div>
