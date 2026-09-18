@@ -1,3 +1,4 @@
+import { apiFailure } from '@/lib/server/api-error';
 import { z } from 'zod';
 import { scope, entity, assetUrl } from '@/lib/server/db';
 import type { ContentVersion } from '@/lib/contracts';
@@ -12,7 +13,9 @@ export async function GET(request: Request) {
       !['qualified', 'approved', 'draft'].includes(c.payload.status) ||
       !c.payload.assetPath
     )
-      throw new Error('Media is not available.');
+      throw Object.assign(new Error('Media is not available.'), {
+        status: 404,
+      });
     return Response.json(
       {
         url: await assetUrl(c.payload.assetPath, 300),
@@ -21,9 +24,6 @@ export async function GET(request: Request) {
       { headers: { 'Cache-Control': 'private,max-age=300' } },
     );
   } catch (e) {
-    return Response.json(
-      { error: (e as Error).message },
-      { status: (e as Error & { status?: number }).status ?? 400 },
-    );
+    return apiFailure(e, 'media');
   }
 }

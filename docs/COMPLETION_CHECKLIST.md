@@ -37,3 +37,8 @@ Updated 17 September 2026. This checklist distinguishes implementation, local ve
 ## Evidence and handoff
 
 See INTERACTION_INVENTORY.md for controls, SEARCH_CONTRACT.md for the current vertical workflow, VALIDATION.md for previous verified work, and OPERATIONS.md for activation and operations. Do not mark the full application complete while required capabilities or live acceptance remain unchecked.
+
+### 18 September continuation
+
+- [x] Apply safe error responses to jobs, media, reports, exports and state; add 18 regression tests (82 application tests total).
+- [ ] Extend the same contract to mutation routes, ingestion and OAuth callbacks, preserving actionable domain validation.

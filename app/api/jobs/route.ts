@@ -1,3 +1,4 @@
+import { apiFailure } from '@/lib/server/api-error';
 import { z } from 'zod';
 import { db, scope } from '@/lib/server/db';
 export const dynamic = 'force-dynamic';
@@ -33,9 +34,6 @@ export async function GET(request: Request) {
       { headers: { 'Cache-Control': 'private,no-store' } },
     );
   } catch (e) {
-    return Response.json(
-      { error: (e as Error).message },
-      { status: (e as Error & { status?: number }).status ?? 400 },
-    );
+    return apiFailure(e, 'jobs');
   }
 }

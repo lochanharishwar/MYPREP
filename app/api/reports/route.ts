@@ -1,3 +1,4 @@
+import { apiFailure } from '@/lib/server/api-error';
 import { z } from 'zod';
 import { scope, rpc } from '@/lib/server/db';
 import { env } from '@/lib/server/env';
@@ -10,9 +11,7 @@ export async function GET(request: Request) {
     const start = z.iso.date().parse(q.get('start'));
     const end = z.iso.date().parse(q.get('end'));
     if (start >= end || Date.parse(end) - Date.parse(start) > 366 * 86400000)
-      throw new Error(
-        'Choose a reporting period of 1–366 days. The end date is exclusive.',
-      );
+      throw Object.assign(new Error('Invalid reporting period.'), { status: 400 });
     const type = z.enum(['attribution', 'metrics']).parse(q.get('type'));
     const result =
       type === 'attribution'
@@ -56,9 +55,6 @@ export async function GET(request: Request) {
       headers: { 'Cache-Control': 'private,no-store' },
     });
   } catch (e) {
-    return Response.json(
-      { error: (e as Error).message },
-      { status: (e as Error & { status?: number }).status ?? 400 },
-    );
+    return apiFailure(e, 'reports');
   }
 }

@@ -1,3 +1,4 @@
+import { apiFailure } from '@/lib/server/api-error';
 import { z } from 'zod';
 import { scope, db } from '@/lib/server/db';
 export const dynamic = 'force-dynamic';
@@ -30,7 +31,12 @@ export async function GET(request: Request) {
           ? ['customerId', 'name', 'email', 'accountId']
           : ['accountId', 'name'];
     const cell = (value: unknown) => {
-      let text = typeof value === 'string' ? value : typeof value === 'number' ? value.toString() : '';
+      let text =
+        typeof value === 'string'
+          ? value
+          : typeof value === 'number'
+            ? value.toString()
+            : '';
       if (/^[\s]*[=+@-]/.test(text)) text = "'" + text;
       return '"' + text.replaceAll('"', '""') + '"';
     };
@@ -57,9 +63,6 @@ export async function GET(request: Request) {
       { headers: { 'Cache-Control': 'private,no-store' } },
     );
   } catch (e) {
-    return Response.json(
-      { error: (e as Error).message },
-      { status: (e as Error & { status?: number }).status ?? 400 },
-    );
+    return apiFailure(e, 'export');
   }
 }

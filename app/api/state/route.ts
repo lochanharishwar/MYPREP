@@ -1,3 +1,4 @@
+import { apiFailure } from '@/lib/server/api-error';
 import { db, scope, authenticate, rpc } from '@/lib/server/db';
 import { env, serviceStatus } from '@/lib/server/env';
 export const dynamic = 'force-dynamic';
@@ -63,12 +64,6 @@ export async function GET(request: Request) {
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (e) {
-    return Response.json(
-      { ...base, error: (e as Error).message },
-      {
-        status: (e as Error & { status?: number }).status ?? 500,
-        headers: { 'Cache-Control': 'no-store' },
-      },
-    );
+    return apiFailure(e, 'state', base);
   }
 }
