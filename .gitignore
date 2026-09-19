@@ -1,5 +1,5 @@
-# dependencies
-/node_modules
+# Dependencies
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -8,36 +8,51 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
+# Testing
+coverage/
 
-# next.js
-/.next/
-/.vinext/
-/out/
+# Next.js / Vinext
+.next/
+.vinext/
+out/
 
-# misc
-.DS_Store
-*.pem
+# Build output
+dist/
+outputs/
+work/
 
-# debug
+# Deployment
+.vercel/
+.wrangler/
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.development
+.env*.local
+
+# IMPORTANT: Keep the example environment file
+!.env.example
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Python
+__pycache__/
+*.pyc
+/services/processor/.venv/
+
+# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# local environment
-.env*
+# OS
+.DS_Store
+Thumbs.db
 
-# deployment and generated files
-.vercel
-next-env.d.ts
-/dist/
-/.wrangler/
-/outputs/
-/work/
-!.env.example
-*.tsbuildinfo
-__pycache__/
-*.pyc
-/services/processor/.venv/
+# Certificates
+*.pem

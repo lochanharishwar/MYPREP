@@ -534,30 +534,34 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             ? request.platforms
             : [];
           const assetUrl =
-            result.image && result.image.data.length < 1200000
-              ? `data:${result.image.mimeType};base64,${result.image.data}`
+            result.image && result.image.data
+              ? result.image.data.startsWith('data:')
+                ? result.image.data
+                : `data:${result.image.mimeType || 'image/svg+xml'};base64,${result.image.data}`
               : undefined;
           const content = platforms.flatMap((platform) =>
             formats
               .filter((format) => format !== 'video')
-              .map((format) =>
-                create('content', targetBrand, {
+              .map((format) => {
+                const isImage = format === 'image';
+                const mediaUrl = isImage ? assetUrl : undefined;
+                return create('content', targetBrand, {
                   campaignId: campaign.id,
                   dnaId: dna.id,
                   format,
                   platform,
                   caption: result.caption,
-                  assetPath: assetUrl ? 'browser-storage' : null,
-                  assetUrl,
-                  mimeType: result.image?.mimeType ?? null,
+                  assetPath: mediaUrl ? 'browser-storage' : null,
+                  assetUrl: mediaUrl,
+                  mimeType: isImage ? (result.image?.mimeType ?? null) : null,
                   review: result.review,
                   status: result.review?.passed
                     ? 'qualified'
                     : 'needs_revision',
                   contentHash: crypto.randomUUID(),
                   attempt: 1,
-                }),
-              ),
+                });
+              }),
           );
           const completedCampaign = {
             ...campaign,

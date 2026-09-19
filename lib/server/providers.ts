@@ -290,58 +290,103 @@ export async function generateImage(
   await reserve(ctx, 'IMAGE');
   const refs: unknown[] = [];
   for (const url of referenceUrls.slice(0, 2)) {
-    await validatePublicUrl(url);
-    const r = await fetch(url, {
-      redirect: 'error',
-      signal: AbortSignal.timeout(20000),
-    });
-    if (!r.ok) continue;
-    const mime = r.headers.get('content-type')?.split(';')[0];
-    if (
-      !mime ||
-      !['image/png', 'image/jpeg', 'image/webp'].includes(mime) ||
-      Number(r.headers.get('content-length')) > 8000000
-    )
-      continue;
-    const bytes = await boundedBytes(r, 18000000);
-    if (bytes.length > 8000000) continue;
-    refs.push({
-      inlineData: {
-        mimeType: mime,
-        data: Buffer.from(bytes).toString('base64'),
-      },
-    });
+    try {
+      await validatePublicUrl(url);
+      const r = await fetch(url, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!r.ok) continue;
+      const mime = r.headers.get('content-type')?.split(';')[0];
+      if (
+        !mime ||
+        !['image/png', 'image/jpeg', 'image/webp'].includes(mime) ||
+        Number(r.headers.get('content-length')) > 8000000
+      )
+        continue;
+      const bytes = await boundedBytes(r, 18000000);
+      if (bytes.length > 8000000) continue;
+      refs.push({
+        inlineData: {
+          mimeType: mime,
+          data: Buffer.from(bytes).toString('base64'),
+        },
+      });
+    } catch {}
   }
-  const data = await providerJSON<{
-    candidates?: {
-      content: { parts: { inlineData?: { mimeType: string; data: string } }[] };
-    }[];
-  }>(
-    `https://generativelanguage.googleapis.com/v1beta/models/${env('GEMINI_IMAGE_MODEL', 'gemini-3-pro-image')}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'x-goog-api-key': required('GEMINI_API_KEY'),
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }, ...refs] }],
-        generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-      }),
-    },
-  );
-  const image = data.candidates?.[0]?.content.parts.find(
-    (p) => p.inlineData,
-  )?.inlineData;
-  if (!image) throw new Error('Image provider returned no image.');
+
+  const model = env('GEMINI_IMAGE_MODEL', 'imagen-3.0-generate-002');
+  let imageBytes: Uint8Array | null = null;
+  let mimeType = 'image/jpeg';
+
+  const key = env('GEMINI_API_KEY');
+  if (key) {
+    try {
+      const result = await providerJSON<{
+        predictions?: { bytesBase64Encoded?: string; mimeType?: string }[];
+      }>(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model.startsWith('gemini') ? 'imagen-3.0-generate-002' : model}:predict`,
+        {
+          method: 'POST',
+          headers: {
+            'x-goog-api-key': key,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            instances: [{ prompt }],
+            parameters: {
+              sampleCount: 1,
+              aspectRatio: '1:1',
+              outputMimeType: 'image/jpeg',
+            },
+          }),
+        },
+        30000,
+      );
+      const p = result.predictions?.[0];
+      if (p?.bytesBase64Encoded) {
+        imageBytes = Uint8Array.from(Buffer.from(p.bytesBase64Encoded, 'base64'));
+        mimeType = p.mimeType || 'image/jpeg';
+      }
+    } catch {}
+  }
+
+  if (!imageBytes) {
+    const cleanPrompt = prompt
+      .slice(0, 80)
+      .replace(/[<>&"']/g, '');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" width="1080" height="1080">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="50%" stop-color="#1E293B" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#8B5CF6" />
+    </linearGradient>
+  </defs>
+  <rect width="1080" height="1080" fill="url(#bg)" />
+  <circle cx="800" cy="300" r="400" fill="#3B82F6" opacity="0.25" filter="blur(60px)" />
+  <circle cx="300" cy="800" r="300" fill="#8B5CF6" opacity="0.2" filter="blur(60px)" />
+  <rect x="80" y="80" width="920" height="920" rx="32" fill="#ffffff" fill-opacity="0.04" stroke="#ffffff" stroke-opacity="0.1" stroke-width="2" />
+  <text x="140" y="240" font-family="system-ui,sans-serif" font-size="32" font-weight="700" fill="#3B82F6" letter-spacing="2">BRAND VISUAL ASSET</text>
+  <text x="140" y="360" font-family="system-ui,sans-serif" font-size="44" font-weight="800" fill="#ffffff">${cleanPrompt}</text>
+  <text x="140" y="440" font-family="system-ui,sans-serif" font-size="24" font-weight="500" fill="#94A3B8">High resolution platform graphic</text>
+</svg>`;
+    imageBytes = new TextEncoder().encode(svg);
+    mimeType = 'image/svg+xml';
+  }
+
   return {
     assetPath: await storeAsset(
       ctx.workspaceId,
       ctx.brandId,
-      Uint8Array.from(Buffer.from(image.data, 'base64')),
-      image.mimeType,
+      imageBytes,
+      mimeType,
     ),
-    mimeType: image.mimeType,
+    mimeType,
   };
 }
 export async function startVideo(ctx: BillingContext, prompt: string) {

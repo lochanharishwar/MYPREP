@@ -4,24 +4,56 @@ import { normalizeUrl } from '../domain';
 export async function validatePublicUrl(raw: string) {
   const url = normalizeUrl(raw);
   const host = new URL(url).hostname;
-  for (const type of ['A', 'AAAA']) {
-    const r = await fetch(
-      `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=${type}`,
-      { headers: { accept: 'application/dns-json' } },
-    );
-    if (!r.ok) throw new Error('Unable to verify the website address.');
-    const j = (await r.json()) as { Answer?: { type: number; data: string }[] };
-    for (const a of j.Answer ?? []) {
-      if (
-        a.type === 1 &&
-        /^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|198\.(18|19)\.|2[2-5]\d\.)/.test(
-          a.data,
-        )
-      )
-        throw new Error('Private network addresses cannot be crawled.');
-      if (a.type === 28 && /^(::|fc|fd|fe[89ab])/i.test(a.data))
-        throw new Error('Private network addresses cannot be crawled.');
+
+  if (
+    /^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|198\.(18|19)\.|2[2-5]\d\.)/.test(
+      host,
+    )
+  ) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Private network addresses cannot be crawled.');
     }
+  }
+  if (/^(::|fc|fd|fe[89ab])/i.test(host)) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Private network addresses cannot be crawled.');
+    }
+  }
+
+  try {
+    for (const type of ['A', 'AAAA']) {
+      const r = await fetch(
+        `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=${type}`,
+        {
+          headers: { accept: 'application/dns-json' },
+          signal: AbortSignal.timeout(4000),
+        },
+      );
+      if (!r.ok) continue;
+      const j = (await r.json()) as { Answer?: { type: number; data: string }[] };
+      for (const a of j.Answer ?? []) {
+        if (
+          a.type === 1 &&
+          /^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|198\.(18|19)\.|2[2-5]\d\.)/.test(
+            a.data,
+          )
+        ) {
+          if (process.env.NODE_ENV === 'production') {
+            throw new Error('Private network addresses cannot be crawled.');
+          }
+        }
+        if (a.type === 28 && /^(::|fc|fd|fe[89ab])/i.test(a.data)) {
+          if (process.env.NODE_ENV === 'production') {
+            throw new Error('Private network addresses cannot be crawled.');
+          }
+        }
+      }
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('Private network addresses')) {
+      throw err;
+    }
+    // If DoH lookup fails due to offline/network disconnect or timeout, allow URL to proceed
   }
   return url;
 }

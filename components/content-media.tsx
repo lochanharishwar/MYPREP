@@ -8,10 +8,17 @@ import type { Entity, ContentVersion } from '@/lib/contracts';
 export function ContentMedia({ content }: { content: Entity<ContentVersion> }) {
   const { read } = useWorkspace();
   const container = useRef<HTMLDivElement>(null);
+  const directUrl =
+    (content.payload as { assetUrl?: string }).assetUrl ||
+    (content.payload.assetPath?.startsWith('data:')
+      ? content.payload.assetPath
+      : '');
   const [url, setUrl] = useState(''),
     [error, setError] = useState(''),
     [revision, setRevision] = useState(0);
+  const activeUrl = directUrl || url;
   useEffect(() => {
+    if (directUrl) return;
     let active = true;
     const el = container.current;
     if (!el) return;
@@ -21,7 +28,7 @@ export function ContentMedia({ content }: { content: Entity<ContentVersion> }) {
         observer.disconnect();
         void read<{ url: string }>('/api/media?id=' + content.id)
           .then((r) => {
-            if (active) setUrl(r.url);
+            if (active && r?.url) setUrl(r.url);
           })
           .catch((e) => {
             if (active) setError((e as Error).message);
@@ -34,19 +41,19 @@ export function ContentMedia({ content }: { content: Entity<ContentVersion> }) {
       active = false;
       observer.disconnect();
     };
-  }, [content.id, read, revision]);
+  }, [content.id, directUrl, read, revision]);
   return (
     <div ref={container}>
-      {url ? (
+      {activeUrl ? (
         content.payload.format === 'video' ? (
           <VideoPreview
-            src={url}
+            src={activeUrl}
             transcript={content.payload.review.transcript}
           />
         ) : (
           <img
             className="media-preview"
-            src={url}
+            src={activeUrl}
             alt="Generated platform version for approval"
             onError={() =>
               setError('Media URL expired or unavailable. Reload to retry.')
