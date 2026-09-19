@@ -128,7 +128,7 @@ p {
 }
 .app {
   min-height: 100vh;
-  padding-bottom: 110px;
+  padding-bottom: 32px;
   isolation: isolate;
 }
 .ambient {
@@ -512,10 +512,10 @@ p {
   color: #a3bed5;
 }
 .dock {
-  position: fixed;
-  bottom: 22px;
-  left: 50%;
-  transform: translateX(-50%);
+  position: sticky;
+  top: 12px;
+  width: max-content;
+  margin: 18px auto 0;
   display: flex;
   padding: 7px;
   gap: 5px;
@@ -879,7 +879,7 @@ p {
     grid-template-columns: repeat(2, 1fr);
   }
   .dock {
-    bottom: 13px;
+    top: 8px;
   }
   .dock a {
     padding: 13px;

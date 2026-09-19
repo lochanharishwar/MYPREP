@@ -446,6 +446,20 @@ function Shell({ page }: { page: Page }) {
           </button>
         </div>
       </header>
+      <nav className="dock" aria-label="Main navigation">
+        {nav.map((n) => (
+          <Link
+            href={n.path}
+            key={n.id}
+            className={page === n.id ? 'selected' : ''}
+            aria-current={page === n.id ? 'page' : undefined}
+            title={n.label}
+          >
+            <n.icon size={18} />
+            <span>{n.label}</span>
+          </Link>
+        ))}
+      </nav>
       <main id="main" className="content">
         <div className="page-heading">
           <div>
@@ -500,20 +514,7 @@ function Shell({ page }: { page: Page }) {
         )}
         <ResourcePaging />
       </main>
-      <nav className="dock" aria-label="Main navigation">
-        {nav.map((n) => (
-          <Link
-            href={n.path}
-            key={n.id}
-            className={page === n.id ? 'selected' : ''}
-            aria-current={page === n.id ? 'page' : undefined}
-            title={n.label}
-          >
-            <n.icon size={18} />
-            <span>{n.label}</span>
-          </Link>
-        ))}
-      </nav>
+
       <WorkspaceSettings />
     </div>
   );
