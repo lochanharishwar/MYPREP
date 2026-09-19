@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowUpRight,
@@ -323,6 +323,12 @@ function Dashboard() {
 }
 function Shell({ page }: { page: Page }) {
   const w = useWorkspace();
+  // Tool handlers are registered once, but always read the current workspace.
+  // Registering again on every provider update aborts the previous registration.
+  const workspace = useRef(w);
+  useEffect(() => {
+    workspace.current = w;
+  }, [w]);
   useEffect(() => {
     const move = (e: PointerEvent) => {
       document.documentElement.style.setProperty(
@@ -345,59 +351,72 @@ function Shell({ page }: { page: Page }) {
           registerTool: (
             tool: unknown,
             options: { signal: AbortSignal },
-          ) => void;
+          ) => void | Promise<unknown>;
         };
       }
     ).modelContext;
     if (!context) return;
     const lifecycle = new AbortController();
-    try {
-      context.registerTool(
-        {
-          name: 'read_brand_workspace',
-          title: 'Read brand workspace',
-          description:
-            'Read the selected brand and workflow statuses. Read-only.',
-          inputSchema: {
-            type: 'object',
-            properties: {},
-            additionalProperties: false,
-          },
-          annotations: { readOnlyHint: true, untrustedContentHint: true },
-          execute: () => ({
-            brand: w.brand ?? null,
-            workflows: w
-              .records<{ status?: string }>('scan')
-              .map((e) => ({ id: e.id, status: e.payload.status })),
-          }),
-        },
-        { signal: lifecycle.signal },
+    const register = (tool: unknown) => {
+      try {
+        // Some hosts register synchronously while others return a promise. Always
+        // consume a cleanup-time AbortError so it cannot reach the global error
+        // boundary as an unhandled rejection.
+        void Promise.resolve(
+          context.registerTool(tool, { signal: lifecycle.signal }),
+        ).catch((error) => {
+          if (!lifecycle.signal.aborted)
+            console.warn('model_context_registration_failed', error);
+        });
+      } catch (error) {
+        if (!lifecycle.signal.aborted)
+          console.warn('model_context_registration_failed', error);
+      }
+    };
+    register({
+      name: 'read_brand_workspace',
+      title: 'Read brand workspace',
+      description: 'Read the selected brand and workflow statuses. Read-only.',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true, untrustedContentHint: true },
+      execute: () => ({
+        brand: workspace.current.brand ?? null,
+        workflows: workspace.current
+          .records<{ status?: string }>('scan')
+          .map((e) => ({ id: e.id, status: e.payload.status })),
+      }),
+    });
+    register({
+      name: 'select_brand',
+      title: 'Select brand',
+      description: 'Select an existing brand in the workspace.',
+      inputSchema: {
+        type: 'object',
+        properties: { brandId: { type: 'string' } },
+        required: ['brandId'],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: false },
+      execute: (input: unknown) => {
+        const id = (input as { brandId?: string })?.brandId;
+        if (
+          !id ||
+          !workspace.current.state.brands.some((brand) => brand.id === id)
+        )
+          throw new Error('Brand not found.');
+        workspace.current.setBrandId(id);
+        return { selectedBrandId: id };
+      },
+    });
+    return () =>
+      lifecycle.abort(
+        new DOMException('Tool registration replaced.', 'AbortError'),
       );
-      context.registerTool(
-        {
-          name: 'select_brand',
-          title: 'Select brand',
-          description: 'Select an existing brand in the workspace.',
-          inputSchema: {
-            type: 'object',
-            properties: { brandId: { type: 'string' } },
-            required: ['brandId'],
-            additionalProperties: false,
-          },
-          annotations: { readOnlyHint: false },
-          execute: (input: unknown) => {
-            const id = (input as { brandId?: string })?.brandId;
-            if (!id || !w.state.brands.some((b) => b.id === id))
-              throw new Error('Brand not found.');
-            w.setBrandId(id);
-            return { selectedBrandId: id };
-          },
-        },
-        { signal: lifecycle.signal },
-      );
-    } catch {}
-    return () => lifecycle.abort();
-  }, [w]);
+  }, []);
   return (
     <div className="app">
       <a href="#main" className="skip-link">
