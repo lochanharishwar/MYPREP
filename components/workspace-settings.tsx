@@ -111,7 +111,25 @@ export function WorkspaceSettings() {
                 </button>
               )}
               <div className="stack spaced">
-                {!w.session ? (
+                {w.localMode ? (
+                  <>
+                    <div className="notice">
+                      Local workspace mode is on. Brand discoveries and
+                      generated drafts are saved only in this browser; social
+                      publishing, team access, and customer data require the
+                      secure backend.
+                    </div>
+                    <button
+                      className="secondary-btn"
+                      onClick={() => {
+                        localStorage.removeItem('bc_local_workspace_v1');
+                        location.reload();
+                      }}
+                    >
+                      Reset local workspace
+                    </button>
+                  </>
+                ) : !w.session ? (
                   <>
                     <div className="notice">
                       {w.state.configured

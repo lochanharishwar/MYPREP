@@ -46,6 +46,7 @@ interface Context {
   read: <T>(path: string, options?: { signal?: AbortSignal }) => Promise<T>;
   refresh: () => Promise<void>;
   settings: boolean;
+  localMode: boolean;
   setSettings: (v: boolean) => void;
 }
 const WorkspaceContext = createContext<Context | null>(null);
@@ -85,6 +86,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [resources, setResources] = useState<Entity[]>([]),
     [pages, setPages] = useState<Record<string, PageInfo>>({});
   const [loading, setLoading] = useState(true),
+    [localMode, setLocalMode] = useState(false),
     [pending, setPending] = useState(0),
     [notice, setNotice] = useState(''),
     [settings, setSettings] = useState(false);
@@ -93,6 +95,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const epoch = useRef(0);
   const jobIdCursor = useRef('');
   const pendingCommands = useRef(new Map<string, string>());
+  const localSnapshot = useRef({ state: empty, resources: [] as Entity[] });
+  useEffect(() => {
+    localSnapshot.current = { state, resources };
+  }, [state, resources]);
   useEffect(() => {
     let disposed = false;
     let unsubscribe: (() => void) | undefined;
@@ -135,7 +141,47 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             }
           });
           unsubscribe = () => listener.data.subscription.unsubscribe();
-        } else setLoading(false);
+        } else {
+          setLocalMode(true);
+          try {
+            const saved = JSON.parse(
+              localStorage.getItem('bc_local_workspace_v1') ?? 'null',
+            ) as { state?: WorkspaceState; resources?: Entity[] } | null;
+            if (saved?.state?.workspace) {
+              setState({ ...saved.state, services: config.services });
+              setResources(saved.resources ?? []);
+              setWorkspace(saved.state.workspace.id);
+              setBrand(saved.state.brands[0]?.id ?? '');
+            } else {
+              const id = crypto.randomUUID();
+              const local = {
+                ...empty,
+                services: config.services,
+                workspace: {
+                  id,
+                  name: 'Local workspace',
+                  monthly_limit: 0,
+                  currency: 'USD',
+                  role: 'owner' as const,
+                },
+                workspaces: [
+                  { id, name: 'Local workspace', role: 'owner' as const },
+                ],
+              };
+              setState(local);
+              setWorkspace(id);
+              localStorage.setItem(
+                'bc_local_workspace_v1',
+                JSON.stringify({ state: local, resources: [] }),
+              );
+            }
+          } catch {
+            setNotice(
+              'Browser storage is unavailable. Local work will not persist.',
+            );
+          }
+          setLoading(false);
+        }
       })
       .catch(() => {
         setNotice('Could not load workspace configuration. Refresh to retry.');
@@ -157,6 +203,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
   const read = useCallback(
     async <T,>(url: string, options?: { signal?: AbortSignal }): Promise<T> => {
+      if (localMode) return { groups: [] } as T;
       if (!client)
         throw new Error('Connect Supabase to access workspace data.');
       const { data } = await client.auth.getSession();
@@ -176,11 +223,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         );
       return value as T;
     },
-    [client, workspaceId],
+    [client, localMode, workspaceId],
   );
   const loadResources = useCallback(
     async (kinds: string[], nextCursor?: string) => {
-      if (!brandId || !client) return;
+      if (!brandId || (!client && !localMode)) return;
       const requestedEpoch = epoch.current;
       const result = await read<{
         groups: {
@@ -214,9 +261,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         ),
       }));
     },
-    [brandId, client, read],
+    [brandId, client, localMode, read],
   );
   const refresh = useCallback(async () => {
+    if (localMode) {
+      setLoading(false);
+      return;
+    }
     if (!client) return;
     const requestedEpoch = epoch.current;
     const next = await read<WorkspaceState>('/api/state');
@@ -235,9 +286,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             next.brands[0]?.id ??
             '');
     });
-  }, [client, read, workspaceId]);
+  }, [client, localMode, read, workspaceId]);
   useEffect(() => {
-    if (!client) return;
+    if (!client && !localMode) return;
     queueMicrotask(
       () =>
         void refresh().catch((e) => {
@@ -245,18 +296,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           setLoading(false);
         }),
     );
-  }, [client, refresh, session]);
+  }, [client, localMode, refresh, session]);
   useEffect(() => {
-    if (!brandId || !session) return;
+    if (!brandId || (!session && !localMode)) return;
     queueMicrotask(
       () =>
         void loadResources(resourcesByPath[path] ?? resourcesByPath['/']).catch(
           (e) => setNotice((e as Error).message),
         ),
     );
-  }, [brandId, session, path, loadResources]);
+  }, [brandId, session, localMode, path, loadResources]);
   useEffect(() => {
-    if (!brandId || !session) return;
+    if (!brandId || !session || localMode) return;
     cursor.current = new Date().toISOString();
     jobIdCursor.current = '';
     let active = true;
@@ -313,7 +364,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       active = false;
       clearInterval(timer);
     };
-  }, [brandId, session, read, path, loadResources]);
+  }, [brandId, session, localMode, read, path, loadResources]);
   const setWorkspaceId = (id: string) => {
     epoch.current++;
     setWorkspace(id);
@@ -334,6 +385,205 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     } catch {}
   };
   async function mutate<T>(action: string, body: unknown): Promise<T> {
+    if (localMode) {
+      const request = body as Record<string, unknown>;
+      const text = (value: unknown, fallback = '') =>
+        typeof value === 'string' ? value : fallback;
+      const snapshot = localSnapshot.current;
+      const currentWorkspace = snapshot.state.workspace;
+      if (!currentWorkspace)
+        throw new Error('Local workspace is still loading.');
+      const save = (nextState: WorkspaceState, nextResources: Entity[]) => {
+        setState(nextState);
+        setResources(nextResources);
+        try {
+          localStorage.setItem(
+            'bc_local_workspace_v1',
+            JSON.stringify({ state: nextState, resources: nextResources }),
+          );
+        } catch {
+          setNotice('This result is visible now, but browser storage is full.');
+        }
+      };
+      const now = new Date().toISOString();
+      const create = (
+        kind: string,
+        brand: string | null,
+        payload: Record<string, unknown>,
+      ): Entity => ({
+        id: crypto.randomUUID(),
+        workspace_id: currentWorkspace.id,
+        brand_id: brand,
+        kind,
+        payload,
+        created_at: now,
+        updated_at: now,
+      });
+      if (action === 'brands') {
+        const website = new URL(text(request.url)).toString();
+        const brand = {
+          id: crypto.randomUUID(),
+          workspace_id: currentWorkspace.id,
+          name: new URL(website).hostname,
+          website,
+        };
+        save(
+          { ...snapshot.state, brands: [...snapshot.state.brands, brand] },
+          snapshot.resources,
+        );
+        return brand as T;
+      }
+      if (action === 'settings') {
+        const workspace = {
+          ...currentWorkspace,
+          name: text(request.name, currentWorkspace.name),
+          monthly_limit: Number(
+            request.monthlyLimit ?? currentWorkspace.monthly_limit,
+          ),
+        };
+        save(
+          {
+            ...snapshot.state,
+            workspace,
+            workspaces: [
+              { id: workspace.id, name: workspace.name, role: workspace.role },
+            ],
+          },
+          snapshot.resources,
+        );
+        return { saved: true } as T;
+      }
+      if (action === 'scan') {
+        const targetBrand = text(request.brandId, brandId);
+        const brand = snapshot.state.brands.find(
+          (item) => item.id === targetBrand,
+        );
+        if (!brand) throw new Error('Enter a brand website first.');
+        const scan = create('scan', targetBrand, {
+          url: brand.website,
+          status: 'running',
+          queue: [],
+          completed: [],
+          failed: [],
+          excluded: [],
+          discovered: 0,
+          batch: 0,
+          agent: 1,
+        });
+        save(snapshot.state, [scan, ...snapshot.resources]);
+        setPending((n) => n + 1);
+        try {
+          const response = await fetch('/api/local/scan', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ url: brand.website }),
+          });
+          const result = (await response.json()) as {
+            error?: string;
+            scan?: Record<string, unknown>;
+            dna?: Record<string, unknown>;
+          };
+          if (!response.ok || !result.scan || !result.dna)
+            throw new Error(result.error ?? 'Website analysis failed.');
+          const nextScan = {
+            ...scan,
+            payload: { ...scan.payload, ...result.scan, agent: 2 },
+          };
+          const dna = create('dna', targetBrand, {
+            ...result.dna,
+            brandId: targetBrand,
+          });
+          const next = [dna, nextScan, ...snapshot.resources];
+          save(snapshot.state, next);
+          return { jobId: scan.id } as T;
+        } finally {
+          setPending((n) => n - 1);
+        }
+      }
+      if (action === 'campaign') {
+        const targetBrand = text(request.brandId, brandId);
+        const dna = snapshot.resources.find(
+          (item) => item.kind === 'dna' && item.brand_id === targetBrand,
+        );
+        if (!dna)
+          throw new Error('Analyze your website before generating content.');
+        const campaign = create('campaign', targetBrand, {
+          ...request,
+          status: 'generating',
+          agent: 3,
+          dnaId: dna.id,
+        });
+        save(snapshot.state, [campaign, ...snapshot.resources]);
+        setPending((n) => n + 1);
+        try {
+          const response = await fetch('/api/local/generate', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ ...request, brand: dna.payload }),
+          });
+          const result = (await response.json()) as {
+            error?: string;
+            caption?: string;
+            image?: { data: string; mimeType: string } | null;
+            review?: Record<string, unknown>;
+          };
+          if (!response.ok || !result.caption || !result.review)
+            throw new Error(result.error ?? 'Generation failed.');
+          const formats = Array.isArray(request.formats) ? request.formats : [];
+          const platforms = Array.isArray(request.platforms)
+            ? request.platforms
+            : [];
+          const assetUrl =
+            result.image && result.image.data.length < 1200000
+              ? `data:${result.image.mimeType};base64,${result.image.data}`
+              : undefined;
+          const content = platforms.flatMap((platform) =>
+            formats
+              .filter((format) => format !== 'video')
+              .map((format) =>
+                create('content', targetBrand, {
+                  campaignId: campaign.id,
+                  dnaId: dna.id,
+                  format,
+                  platform,
+                  caption: result.caption,
+                  assetPath: assetUrl ? 'browser-storage' : null,
+                  assetUrl,
+                  mimeType: result.image?.mimeType ?? null,
+                  review: result.review,
+                  status: result.review?.passed
+                    ? 'qualified'
+                    : 'needs_revision',
+                  contentHash: crypto.randomUUID(),
+                  attempt: 1,
+                }),
+              ),
+          );
+          const completedCampaign = {
+            ...campaign,
+            payload: { ...campaign.payload, status: 'completed', agent: 4 },
+          };
+          save(snapshot.state, [
+            ...content,
+            completedCampaign,
+            ...snapshot.resources,
+          ]);
+          return { jobId: campaign.id } as T;
+        } finally {
+          setPending((n) => n - 1);
+        }
+      }
+      if (action === 'decision' && request.decision === 'reject') {
+        save(
+          snapshot.state,
+          snapshot.resources.filter((item) => item.id !== request.id),
+        );
+        return { deleted: true } as T;
+      }
+      throw new Error(
+        `${action} requires the secure Supabase workspace. Local mode supports brand discovery and text/image generation only.`,
+      );
+    }
     if (!client || !session) {
       setSettings(true);
       const message = state.configured
@@ -413,6 +663,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         read,
         refresh,
         settings,
+        localMode,
         setSettings,
       }}
     >

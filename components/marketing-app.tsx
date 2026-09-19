@@ -465,7 +465,13 @@ function Shell({ page }: { page: Page }) {
           </button>
           <button
             className="avatar"
-            aria-label={w.session ? 'Your account' : 'Sign in'}
+            aria-label={
+              w.localMode
+                ? 'Local workspace settings'
+                : w.session
+                  ? 'Your account'
+                  : 'Sign in'
+            }
             onClick={() => w.setSettings(true)}
           >
             {w.session?.user.email?.slice(0, 2).toUpperCase() ?? 'BC'}
@@ -503,7 +509,9 @@ function Shell({ page }: { page: Page }) {
           </div>
           <button className="subtle-link" onClick={() => w.setSettings(true)}>
             <Plus size={16} />{' '}
-            {w.session ? 'Workspace settings' : 'Connect your workspace'}
+            {w.localMode || w.session
+              ? 'Workspace settings'
+              : 'Connect your workspace'}
           </button>
         </div>
         {w.notice && (
