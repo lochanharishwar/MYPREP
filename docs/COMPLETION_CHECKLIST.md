@@ -19,9 +19,18 @@ Updated 17 September 2026. This checklist distinguishes implementation, local ve
 
 - [x] Add Reject/Disconnect confirmations and atomic owner-scoped disconnect; verify rollback, idempotency and stale-refresh prevention. See STAGE_VERIFICATION.md for isolated browser evidence.
 
+## BrandOS activation status
+
+- [x] Restore the selected BrandOS Supabase project and inspect its schema.
+- [x] Detect the incompatible pre-existing `public.brands` schema before applying BrandCurrent migrations; the attempted transaction rolled back without changes.
+- [x] Add `SUPABASE_DB_SCHEMA` support to the BrandCurrent API server and processor so a dedicated schema can be used without overwriting BrandOS tables.
+- [ ] Create and expose the `brandcurrent` schema, then translate and apply BrandCurrent migrations there. See BRANDOS_BACKEND_ACTIVATION.md.
+- [ ] Configure BrandOS Auth Site URL/redirect allowlist and the Sites runtime keys, then test an email magic link.
+- [ ] Configure a Google OAuth client in the owner's Google Cloud project if Google login is required. Public API keys cannot configure OAuth.
+
 ## External activation — blocked
 
-- [ ] Supply and configure Supabase URL, public key and server-only service role; apply migrations 001–020 to staging, configure email/Google and redirect allowlist. No live project or credentials are available locally.
+- [ ] Supply and configure the BrandOS public key and server-only service role in Sites. Do not put the server-only key in source or client code.
 - [ ] Configure Firecrawl, Browserless, Gemini image/video, Inngest, Cloud Run processor and encrypted social OAuth credentials; set owner budgets and provider tariffs before metered work.
 - [ ] Obtain required platform approvals and authorized test accounts; run each destination's actual publish/reconcile/metrics flow.
 - [ ] Select a callback-reachable origin/audience. Current private review access cannot be assumed reachable by webhooks, tracking, OAuth or durable workers. No sharing changes are made by this work.

@@ -23,7 +23,8 @@ def database(method, path, payload=None):
     origin = os.environ['SUPABASE_URL'].rstrip('/')
     key = os.environ['SUPABASE_SERVICE_ROLE_KEY']
     with httpx.Client(timeout=30, follow_redirects=False) as client:
-        response = client.request(method, origin+'/rest/v1/'+path, headers={'apikey':key,'Authorization':'Bearer '+key,'Prefer':'return=representation'}, json=payload)
+        schema = os.environ.get('SUPABASE_DB_SCHEMA', 'public')
+        response = client.request(method, origin+'/rest/v1/'+path, headers={'apikey':key,'Authorization':'Bearer '+key,'Prefer':'return=representation','Accept-Profile':schema,'Content-Profile':schema}, json=payload)
         response.raise_for_status()
         return response.json() if response.content else None
 

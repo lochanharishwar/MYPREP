@@ -1,12 +1,17 @@
 import 'server-only';
 import { createClient } from '@supabase/supabase-js';
-import { required } from './env';
+import { env, required } from './env';
 import type { Entity, Role } from '../contracts';
 export const db = () =>
   createClient(
     required('SUPABASE_URL'),
     required('SUPABASE_SERVICE_ROLE_KEY'),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    {
+      auth: { persistSession: false, autoRefreshToken: false },
+      // BrandOS already uses public.*. Keep BrandCurrent data in a separately
+      // exposed schema when SUPABASE_DB_SCHEMA is configured.
+      db: { schema: env('SUPABASE_DB_SCHEMA', 'public') },
+    },
   );
 export async function authenticate(request: Request) {
   const token = request.headers.get('authorization')?.replace(/^Bearer /i, '');
