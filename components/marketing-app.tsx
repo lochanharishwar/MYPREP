@@ -25,6 +25,7 @@ import { WorkspaceProvider, useWorkspace } from './workspace-provider';
 import { ResourcePaging } from './resource-paging';
 import { WorkspaceSettings } from './workspace-settings';
 import { ThinkingIndicator } from './thinking-indicator';
+import { LiquidButton } from './ui/liquid-glass-button';
 import type { OrbState } from 'thinking-orbs';
 import {
   BrandView,
@@ -165,10 +166,16 @@ function Dashboard() {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
             />
-            <button disabled={w.busy} className="primary-btn">
+            <LiquidButton
+              type="submit"
+              variant="primary"
+              size="lg"
+              disabled={w.busy}
+              className="shrink-0"
+            >
               {w.busy ? 'Starting…' : 'Discover my brand'}{' '}
               <ArrowRight size={16} />
-            </button>
+            </LiquidButton>
           </form>
           <div className="form-note">
             <span className="row">
