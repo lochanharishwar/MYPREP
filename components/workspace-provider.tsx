@@ -29,6 +29,7 @@ import {
   recoverLocalState,
 } from '@/lib/local-state';
 import { storeLocalMedia, deleteLocalMedia } from '@/lib/local-media';
+import { scanWithProgress } from '@/lib/scan-stream';
 const empty: WorkspaceState = {
   configured: false,
   authenticated: false,
@@ -567,27 +568,49 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         agent: 1,
       });
       put(scan);
+      const dnaId = crypto.randomUUID();
+      let latestScan = scan;
+      let savedPages = 0;
       try {
-        const result = await post<{
-          scan: Record<string, unknown>;
-          dna: BrandDNA;
-          pages: Record<string, unknown>[];
-        }>('/api/local/scan', { url: brand.website });
-        put(
-          create('dna', brand.id, { ...result.dna, brandId: brand.id }),
-          { ...scan, payload: { ...scan.payload, ...result.scan } },
-          ...(result.pages ?? []).map((p) => {
-            const old = snapshot().resources.find(
-              (r) =>
-                r.kind === 'page' &&
-                r.brand_id === brand.id &&
-                r.payload.url === p.url,
-            );
-            return {
-              ...create('page', brand.id, p),
-              ...(old ? { id: old.id } : {}),
+        const result = await scanWithProgress(
+          brand.website,
+          (result, complete) => {
+            savedPages = result.dna.coverage.completed;
+            latestScan = {
+              ...scan,
+              payload: {
+                ...scan.payload,
+                ...result.scan,
+                status: complete ? result.scan.status : 'running',
+              },
             };
-          }),
+            put(
+              {
+                ...create('dna', brand.id, {
+                  ...result.dna,
+                  brandId: brand.id,
+                }),
+                id: dnaId,
+              },
+              latestScan,
+              ...(result.pages ?? []).map((p) => {
+                const old = snapshot().resources.find(
+                  (r) =>
+                    r.kind === 'page' &&
+                    r.brand_id === brand.id &&
+                    r.payload.url === p.url,
+                );
+                return {
+                  ...create('page', brand.id, p),
+                  ...(old ? { id: old.id } : {}),
+                };
+              }),
+            );
+            if (!complete)
+              setNotice(
+                `Read ${savedPages} ${savedPages === 1 ? 'page' : 'pages'}. Findings saved; checking more pages…`,
+              );
+          },
         );
         setNotice(
           `Read ${result.dna.coverage.completed} pages. Your observed Brand DNA is saved; coverage limits are shown below.`,
@@ -595,13 +618,32 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         return { jobId: scan.id } as T;
       } catch (e) {
         put({
-          ...scan,
+          ...latestScan,
           payload: {
-            ...scan.payload,
-            status: 'blocked',
-            error: e instanceof Error ? e.message : 'Scan failed.',
+            ...latestScan.payload,
+            status: savedPages ? 'partial' : 'blocked',
+            error: savedPages
+              ? null
+              : e instanceof Error
+                ? e.message
+                : 'Scan failed.',
+            ...(savedPages
+              ? {
+                  warnings: [
+                    String(
+                      e instanceof Error ? e.message : 'Scan interrupted.',
+                    ),
+                  ],
+                }
+              : {}),
           },
         });
+        if (savedPages) {
+          setNotice(
+            `${savedPages} pages saved. The connection ended before the remaining pages finished. Your results are available below.`,
+          );
+          return { jobId: scan.id } as T;
+        }
         throw e;
       }
     }

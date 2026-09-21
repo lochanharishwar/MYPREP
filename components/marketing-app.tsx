@@ -104,6 +104,8 @@ function Dashboard() {
     failed: string[];
     excluded: string[];
     error?: string;
+    warnings?: string[];
+    coverageNote?: string;
     agent: number;
   }>('scan');
   const campaign = w.records<{
@@ -235,6 +237,21 @@ function Dashboard() {
             </div>
             {scan.payload.error && (
               <p className="notice">{scan.payload.error}</p>
+            )}
+            {scan.payload.coverageNote && (
+              <p className="muted small spaced">{scan.payload.coverageNote}</p>
+            )}
+            {!!scan.payload.warnings?.length && (
+              <details className="small spaced">
+                <summary>
+                  Coverage details ({scan.payload.warnings.length})
+                </summary>
+                {scan.payload.warnings.map((warning, index) => (
+                  <p className="muted" key={index}>
+                    {warning}
+                  </p>
+                ))}
+              </details>
             )}
             {['partial', 'blocked', 'interrupted'].includes(
               scan.payload.status,
@@ -495,20 +512,27 @@ function Shell({ page }: { page: Page }) {
           </Link>
         ))}
       </nav>
-      <main id="main" className="content">
+      <main
+        id="main"
+        className={`content ${page === 'content' ? 'studio-page' : ''}`}
+      >
         <div className="page-heading">
           <div>
-            <div className="eyebrow">YOUR MARKETING, IN MOTION</div>
+            {page !== 'content' && (
+              <div className="eyebrow">YOUR MARKETING, IN MOTION</div>
+            )}
             <h1>
               {page === 'dashboard'
                 ? 'A clearer view. A stronger brand.'
                 : nav.find((n) => n.id === page)?.label}
             </h1>
-            <p className="muted">
-              {page === 'dashboard'
-                ? 'From your first impression to your next customer. All connected.'
-                : 'One connected workspace. Every decision grounded in your brand.'}
-            </p>
+            {page !== 'content' && (
+              <p className="muted">
+                {page === 'dashboard'
+                  ? 'From your first impression to your next customer. All connected.'
+                  : 'One connected workspace. Every decision grounded in your brand.'}
+              </p>
+            )}
           </div>
           <button className="subtle-link" onClick={() => w.setSettings(true)}>
             <Plus size={16} />{' '}

@@ -17,6 +17,25 @@ export function ActivationNotice({
     insights:
       'Customer tracking, imports and attribution require the server workspace. Connect verified purchase events and advertising spend to calculate revenue, CAC and ROAS.',
   }[feature];
+  if (feature === 'generation')
+    return (
+      <details className="studio-setup">
+        <summary>
+          {w.state.services.find((s) => s.name === 'Generation & review')?.ready
+            ? 'Generation settings'
+            : 'Generation provider needs setup'}{' '}
+          <span className="muted small">Provider and spending limits</span>
+        </summary>
+        <p className="muted small">{text}</p>
+        <button
+          type="button"
+          className="text-link small spaced"
+          onClick={() => w.setSettings(true)}
+        >
+          Check setup and spending limits
+        </button>
+      </details>
+    );
   return (
     <aside className="notice" role="note">
       <p>{text}</p>

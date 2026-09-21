@@ -197,9 +197,39 @@ export function DNACard({ compact = false }: { compact?: boolean }) {
       </div>
       <div className="spaced">
         {dna.overview.map((f, i) => (
-          <p key={i}>{f.text}</p>
+          <div key={i} className="spaced">
+            <p>{f.text}</p>
+            {!compact && (
+              <details className="small">
+                <summary>Source</summary>
+                {f.evidenceIds.map((id) => {
+                  const e = dna.evidence.find((e) => e.id === id);
+                  return e ? <Source key={id} evidence={e} /> : null;
+                })}
+              </details>
+            )}
+          </div>
         ))}
       </div>
+      {!compact && dna.identityEvidence && (
+        <details className="small spaced">
+          <summary>Identity sources</summary>
+          {Object.entries(dna.identityEvidence).map(([key, ids]) => (
+            <div key={key}>
+              <strong className="capitalize">{key}</strong>
+              {ids?.map((id) => {
+                const e = dna.evidence.find((e) => e.id === id);
+                return e ? <Source key={id} evidence={e} /> : null;
+              })}
+            </div>
+          ))}
+        </details>
+      )}
+      {!!dna.palette.length && (
+        <p className="muted small spaced">
+          Observed primary / brand CSS declarations
+        </p>
+      )}
       <div className="swatches spaced">
         {dna.palette.map((color) => (
           <div className="swatch" key={color}>
@@ -466,15 +496,13 @@ export function ContentView() {
   const toggle = (arr: string[], v: string, set: (a: string[]) => void) =>
     set(arr.includes(v) ? arr.filter((s) => s !== v) : [...arr, v]);
   return (
-    <div className="stack">
-      <section className="panel glass">
+    <div className="stack content-studio">
+      <section className="panel glass studio-compose">
         <ActivationNotice feature="generation" />
         <div className="section-title">
           <div>
-            <span className="eyebrow">AGENTS 03 + 04</span>
-            <h2 className="spaced">
-              What would you like to put into the world?
-            </h2>
+            <span className="eyebrow">CAMPAIGN STUDIO</span>
+            <h2 className="spaced">Create a campaign</h2>
           </div>
           <Sparkles size={25} />
         </div>
@@ -504,125 +532,193 @@ export function ContentView() {
               .catch(() => {});
           }}
         >
-          <div className="field">
-            <label htmlFor="campaign-idea">Campaign idea</label>
-            <textarea
-              id="campaign-idea"
-              required
-              minLength={8}
-              placeholder="Tell your agents the story, offer, or idea you want to share…"
-              value={idea}
-              onChange={(e) => setIdea(e.target.value)}
-            />
-          </div>
-          <div className="form-grid spaced">
-            <fieldset className="field">
-              <legend className="mb-3">
-                Choose your formats <span className="muted">· required</span>
-              </legend>
-              <div className="tabs-row">
-                {[
-                  { id: 'video', icon: Video },
-                  { id: 'image', icon: ImageIcon },
-                  { id: 'text', icon: FileText },
-                ].map((f) => (
-                  <label
-                    className={`format-option ${formats.includes(f.id) ? 'checked' : ''}`}
-                    key={f.id}
-                  >
-                    <Checkbox
-                      disabled={w.localMode && f.id === 'video'}
-                      checked={formats.includes(f.id)}
-                      onCheckedChange={() => toggle(formats, f.id, setFormats)}
-                    />
-                    <f.icon size={18} />
-                    <span className="capitalize">{f.id}</span>
-                  </label>
-                ))}
+          <div className="studio-columns">
+            <div className="studio-brief">
+              <div className="field">
+                <label htmlFor="campaign-idea">What are we creating?</label>
+                <textarea
+                  id="campaign-idea"
+                  required
+                  minLength={8}
+                  rows={4}
+                  placeholder="Launch a product, tell a story, or share an offer…"
+                  value={idea}
+                  onChange={(e) => setIdea(e.target.value)}
+                />
               </div>
-            </fieldset>
-            <fieldset className="field">
-              <legend className="mb-3">Where will it live?</legend>
-              <div className="tabs-row">
-                {platforms.map((p) => (
-                  <label key={p} className="row small">
-                    <Checkbox
-                      disabled={w.localMode && p === 'youtube'}
-                      checked={targets.includes(p)}
-                      onCheckedChange={() => toggle(targets, p, setTargets)}
+              <fieldset className="studio-formats">
+                <legend>
+                  Format{' '}
+                  <span className="muted small">· choose at least one</span>
+                </legend>
+                <div className="studio-format-grid">
+                  {[
+                    {
+                      id: 'image',
+                      icon: ImageIcon,
+                      description: 'Product & lifestyle',
+                    },
+                    {
+                      id: 'text',
+                      icon: FileText,
+                      description: 'Posts & captions',
+                    },
+                    {
+                      id: 'video',
+                      icon: Video,
+                      description: w.localMode
+                        ? 'Server setup needed'
+                        : 'Motion & stories',
+                    },
+                  ].map((f) => (
+                    <label
+                      htmlFor={`format-${f.id}`}
+                      className={`format-option studio-format ${formats.includes(f.id) ? 'checked' : ''} ${w.localMode && f.id === 'video' ? 'unavailable' : ''}`}
+                      key={f.id}
+                    >
+                      <f.icon size={20} />
+                      <span>
+                        <strong className="capitalize">{f.id}</strong>
+                        <small>{f.description}</small>
+                      </span>
+                      <Checkbox
+                        id={`format-${f.id}`}
+                        aria-label={`${f.id} format`}
+                        disabled={w.localMode && f.id === 'video'}
+                        checked={formats.includes(f.id)}
+                        onCheckedChange={() =>
+                          toggle(formats, f.id, setFormats)
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <label className="field">
+                Audience
+                <input
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value)}
+                  placeholder="Who should this resonate with?"
+                />
+              </label>
+              <details className="studio-advanced">
+                <summary>
+                  Creative details <span className="muted small">Optional</span>
+                </summary>
+                <div className="form-grid">
+                  <label className="field">
+                    Product-use scenario
+                    <input
+                      value={scenario}
+                      onChange={(e) => setScenario(e.target.value)}
+                      placeholder="Where and how is it used?"
                     />
-                    <span className="capitalize">{p}</span>
                   </label>
-                ))}
+                  <label className="field">
+                    Event or passion
+                    <input
+                      value={event}
+                      onChange={(e) => setEvent(e.target.value)}
+                      placeholder="Launch, festival, or interest"
+                    />
+                  </label>
+                  <label className="field span-2">
+                    Product image reference URL
+                    <input
+                      type="url"
+                      value={referenceUrl}
+                      onChange={(e) => setReferenceUrl(e.target.value)}
+                      placeholder="https://…/your-product.jpg"
+                    />
+                  </label>
+                  <label className="field span-2">
+                    Creative direction
+                    <input
+                      value={direction}
+                      onChange={(e) => setDirection(e.target.value)}
+                      placeholder="Style, casting, language, or references"
+                    />
+                  </label>
+                </div>
+              </details>
+            </div>
+            <aside className="studio-delivery">
+              <div className="studio-brand">
+                <Dna size={18} />
+                <div>
+                  <span className="muted small">Brand source</span>
+                  <strong>
+                    {w.records<BrandDNA>('dna')[0]?.payload.name ||
+                      w.brand?.name ||
+                      'Choose a brand'}
+                  </strong>
+                  <span className="muted small">
+                    {w.records<BrandDNA>('dna')[0]
+                      ? `${w.records<BrandDNA>('dna')[0].payload.coverage.completed} observed pages`
+                      : 'Scan a website to start'}
+                  </span>
+                </div>
               </div>
-            </fieldset>
-            <label className="field">
-              Audience
-              <input
-                value={audience}
-                onChange={(e) => setAudience(e.target.value)}
-                placeholder="Who are you speaking to?"
-              />
-            </label>
-            <label className="field">
-              Product-use scenario
-              <input
-                value={scenario}
-                onChange={(e) => setScenario(e.target.value)}
-                placeholder="Where does your product make a difference?"
-              />
-            </label>
-            <label className="field">
-              Event or passion
-              <input
-                value={event}
-                onChange={(e) => setEvent(e.target.value)}
-                placeholder="A launch, festival, or shared interest"
-              />
-            </label>
-            <label className="field">
-              Campaign limit (USD)
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                required
-                value={budget}
-                onChange={(e) => setBudget(e.target.value)}
-                placeholder="Your maximum automation spend"
-              />
-            </label>
-            <label className="field span-2">
-              Product image reference URL
-              <input
-                type="url"
-                value={referenceUrl}
-                onChange={(e) => setReferenceUrl(e.target.value)}
-                placeholder="Optional public PNG, JPEG or WebP of your product"
-              />
-            </label>
-            <label className="field span-2">
-              Creative direction
-              <input
-                value={direction}
-                onChange={(e) => setDirection(e.target.value)}
-                placeholder="Optional: specific style, casting, language, or references"
-              />
-            </label>
-          </div>
-          <div className="section-title spaced">
-            <p className="muted small">
-              Only compatible platform/format pairs are generated.
-              <br />
-              Up to 5 attempts. A minimum score of 8.7/10.
-            </p>
-            <button
-              className="primary-btn"
-              disabled={w.busy || !formats.length || !targets.length}
-            >
-              <Sparkles size={16} />{' '}
-              {w.busy ? 'Generating and reviewing…' : 'Generate content'}
-            </button>
+              <fieldset>
+                <legend>
+                  Platforms <span className="muted small">· required</span>
+                </legend>
+                <div className="studio-platforms">
+                  {platforms.map((p) => (
+                    <label
+                      key={p}
+                      className={`studio-platform ${targets.includes(p) ? 'checked' : ''}`}
+                    >
+                      <Checkbox
+                        aria-label={p}
+                        disabled={w.localMode && p === 'youtube'}
+                        checked={targets.includes(p)}
+                        onCheckedChange={() => toggle(targets, p, setTargets)}
+                      />
+                      <span className="capitalize">
+                        {p === 'youtube'
+                          ? 'YouTube'
+                          : p === 'linkedin'
+                            ? 'LinkedIn'
+                            : p === 'x'
+                              ? 'X'
+                              : p}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <label className="field">
+                Campaign limit <span className="muted small">USD</span>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  value={budget}
+                  onChange={(e) => setBudget(e.target.value)}
+                  placeholder="Maximum spend"
+                />
+              </label>
+              <p className="muted small studio-review-note">
+                <ShieldCheck size={16} />
+                Up to 5 attempts. Only results scoring 8.7/10 or higher reach
+                your gallery.
+              </p>
+              <button
+                className="primary-btn studio-generate"
+                disabled={w.busy || !formats.length || !targets.length}
+              >
+                <Sparkles size={16} />
+                {w.busy ? 'Generating and reviewing…' : 'Generate content'}
+              </button>
+              <p className="muted small">
+                {formats.length} {formats.length === 1 ? 'format' : 'formats'} ·{' '}
+                {targets.length}{' '}
+                {targets.length === 1 ? 'platform' : 'platforms'} selected
+              </p>
+            </aside>
           </div>
         </form>
       </section>
@@ -675,7 +771,10 @@ export function ContentView() {
       )}
       <section className="panel">
         <div className="section-title">
-          <h2>Ready for your perspective</h2>
+          <h2>
+            Approval gallery{' '}
+            <span className="muted small">({contents.length})</span>
+          </h2>
           <span className="pill green">
             <ShieldCheck size={12} /> Reviewed before you see it
           </span>

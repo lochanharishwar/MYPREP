@@ -9,6 +9,9 @@ import { ThinkingIndicator } from './thinking-indicator';
 type PageInsight = {
   url: string;
   screenshot?: string;
+  thumbnail?: string;
+  title?: string;
+  retrieval?: string;
   summary?: { summary?: string; insights?: Finding[]; seoIssues?: string[] };
   error?: string;
 };
@@ -131,6 +134,7 @@ function ResultsList({ query }: { query: string }) {
       <div className="two-col spaced">
         {result?.rows.map((page) => (
           <article className="data-card" key={page.id}>
+            {page.payload.title && <h3>{page.payload.title}</h3>}
             {publicUrl(page.payload.screenshot) && (
               <img
                 src={publicUrl(page.payload.screenshot)}
@@ -151,6 +155,9 @@ function ResultsList({ query }: { query: string }) {
               <p>{page.payload.url}</p>
             )}
             <p>{page.payload.summary?.summary}</p>
+            {page.payload.retrieval && (
+              <p className="muted small">{page.payload.retrieval}</p>
+            )}
             {page.payload.summary?.insights?.map((finding, index) => (
               <p key={index}>{finding.text}</p>
             ))}

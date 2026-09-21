@@ -81,7 +81,7 @@ describe('Actual website observations', () => {
       parsePage('<h1>An ordinary heading</h1>', 'https://example.com').tagline,
     ).toBeNull();
     const styles = observedStyles(
-      '.title {color:#AABBCC;font-family:Inter} .card{background:rgb(1, 2, 3)}',
+      'body {color:#AABBCC;font-family:Inter} .card{background:rgb(1, 2, 3)}',
       'https://example.com/style.css',
     );
     expect(styles.colors).toHaveLength(2);
@@ -124,7 +124,8 @@ describe('Actual website observations', () => {
     expect(data.scan.status).toBe('partial');
     expect(data.scan.completed).toHaveLength(6);
     expect(data.scan.queue.length).toBeGreaterThan(0);
-    expect(data.scan.error).toContain('stylesheet');
+    expect(data.scan.warnings.join(' ')).toContain('Stylesheet');
+    expect(data.scan.error).toBeNull();
     expect(data.dna.colors).toEqual([]);
     expect(data.dna.tagline).toBeNull();
     expect(data.dna.values).toEqual([]);

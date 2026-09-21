@@ -8,7 +8,10 @@ export function assertLocalRequest(request: Request) {
   if (
     hosted &&
     (env('BROWSER_WORKSPACE_MODE') !== 'sites' ||
-      !request.headers.get('oai-authenticated-user-id'))
+      !(
+        request.headers.get('oai-authenticated-user-id')?.trim() ||
+        request.headers.get('oai-authenticated-user-email')?.trim()
+      ))
   )
     throw Object.assign(
       new Error(
@@ -22,9 +25,16 @@ export function assertLocalRequest(request: Request) {
       new Error('Local processing requires a loopback server.'),
       { status: 403 },
     );
+  // Sites dispatch authenticates visitors and replaces these identity headers.
+  // Older dispatchers forward email without a stable ID. No server records are
+  // keyed by this value: these routes return results to the browser workspace.
   const origin = request.headers.get('origin');
+  const expectedOrigin =
+    hosted && env('APP_ORIGIN')
+      ? new URL(env('APP_ORIGIN')).origin
+      : url.origin;
   if (
-    (origin && origin !== url.origin) ||
+    (origin && origin !== expectedOrigin) ||
     request.headers.get('sec-fetch-site') === 'cross-site'
   )
     throw Object.assign(new Error('Cross-site requests are not allowed.'), {

@@ -1,109 +1,11 @@
-import type { BrandDNA, Evidence } from '../contracts';
+import type { BrandDNA, Evidence, Finding } from '../contracts';
 import { normalizeUrl } from '../domain';
 import { boundedBytes } from './http';
 import { publicFetch } from './public-fetch';
+import { validatePublicUrl } from './security';
+import { parsePage, plainText, safeLink } from './page-observations';
+export { parsePage, plainText } from './page-observations';
 
-// Basic public HTML analysis. Missing facts stay missing.
-export function plainText(html: string) {
-  return html
-    .replace(/<(script|style|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&#(x[\da-f]+|\d+);/gi, (_, n: string) => {
-      const code =
-        n[0].toLowerCase() === 'x' ? parseInt(n.slice(1), 16) : Number(n);
-      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : '';
-    })
-    .replace(
-      /&(amp|quot|apos|lt|gt|nbsp);/g,
-      (_, n: string) =>
-        ({ amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ' })[n] ??
-        '',
-    )
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-function attributes(tag: string) {
-  return Object.fromEntries(
-    [...tag.matchAll(/([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)].map(
-      (x) => [x[1].toLowerCase(), plainText(x[2] ?? x[3] ?? x[4] ?? '')],
-    ),
-  );
-}
-function safeLink(raw: string, base: string) {
-  try {
-    return normalizeUrl(new URL(raw, base).href);
-  } catch {
-    return null;
-  }
-}
-export function parsePage(html: string, url: string) {
-  const meta = Object.fromEntries(
-    [...html.matchAll(/<meta\b[^>]*>/gi)].map((x) => {
-      const a = attributes(x[0]);
-      return [a.name ?? a.property, a.content ?? ''];
-    }),
-  );
-  const headings = [...html.matchAll(/<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/gi)]
-    .map((x) => plainText(x[1]))
-    .filter(Boolean);
-  const tagline = [
-    ...html.matchAll(
-      /<(?:p|h[1-6]|span|div)\b([^>]*)>([^<]+)<\/(?:p|h[1-6]|span|div)>/gi,
-    ),
-  ].find((x) =>
-    /tagline|slogan/i.test(
-      [attributes(x[1]).class, attributes(x[1]).id].join(' '),
-    ),
-  );
-  const logo = [...html.matchAll(/<img\b[^>]*>/gi)]
-    .map((x) => attributes(x[0]))
-    .find((a) => /logo/i.test([a.alt, a.class, a.id, a.src].join(' ')));
-  const links = [...html.matchAll(/<(?:a|link)\b[^>]*>/gi)].map((x) =>
-    attributes(x[0]),
-  );
-  const styles = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map(
-    (x) => x[1],
-  );
-  const inline = [
-    ...html.matchAll(/<[^>]+\sstyle\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>/gi),
-  ].map((x) => {
-    const a = attributes(x[0]);
-    const tag = x[0].match(/^<([\w:-]+)/)?.[1] ?? 'element';
-    const selector = a.id
-      ? `${tag}#${a.id}`
-      : a.class
-        ? `${tag}.${a.class.trim().split(/\s+/).slice(0, 3).join('.')}`
-        : `${tag}[style]`;
-    return `${selector} { ${x[1] ?? x[2]} }`;
-  });
-  return {
-    url,
-    title: plainText(
-      html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? '',
-    ),
-    name: meta['og:site_name'] || null,
-    description: meta.description || meta['og:description'] || '',
-    tagline: tagline ? plainText(tagline[2]) : null,
-    logo: logo?.src ? safeLink(logo.src, url) : null,
-    headings,
-    text: plainText(html).slice(0, 20000),
-    links: [...html.matchAll(/<a\b[^>]*>/gi)]
-      .map((x) => attributes(x[0]))
-      .filter((a) => a.href)
-      .flatMap((a) => {
-        const u = safeLink(a.href, url);
-        return u ? [u] : [];
-      }),
-    stylesheets: links
-      .filter((a) => a.href && a.rel?.split(' ').includes('stylesheet'))
-      .flatMap((a) => {
-        const u = safeLink(a.href, url);
-        return u ? [u] : [];
-      }),
-    css: [...styles, ...inline].join('\n'),
-  };
-}
 export function observedStyles(css: string, url: string) {
   const colors: BrandDNA['colors'] = [];
   const fonts = new Set<string>();
@@ -114,14 +16,33 @@ export function observedStyles(css: string, url: string) {
     for (const match of (declarations ?? '').matchAll(
       /(?:^|;)\s*([\w-]+)\s*:\s*([^;]+)/g,
     )) {
-      if (match[1] === 'font-family') fonts.add(match[2].trim());
+      if (
+        match[1] === 'font-family' &&
+        /(?:^|[\s,])(?:html|body|:root)(?:$|[\s,.#:[>])/i.test(selector) &&
+        !/var\(/i.test(match[2])
+      )
+        fonts.add(match[2].trim());
       for (const c of match[2].matchAll(
-        /#[\da-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)/gi,
+        /#[\da-f]{3,8}\b|(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\(/gi,
       )) {
         if (c[0].startsWith('#') && ![4, 5, 7, 9].includes(c[0].length))
           continue;
+        let value = c[0];
+        if (value.endsWith('(')) {
+          let depth = 1,
+            end = c.index + value.length;
+          while (end < match[2].length && depth) {
+            if (match[2][end] === '(') depth++;
+            if (match[2][end] === ')') depth--;
+            end++;
+          }
+          if (depth) continue;
+          value = match[2].slice(c.index, end);
+        }
+        // Unresolved var() expressions must not resolve against this app's CSS.
+        if (/var\(/i.test(value)) continue;
         colors.push({
-          value: c[0].toLowerCase(),
+          value: value.toLowerCase(),
           selector: `${selector.trim().slice(0, 160)} · ${match[1]}`,
           url,
           method: 'CSS declaration (not computed)',
@@ -132,118 +53,422 @@ export function observedStyles(css: string, url: string) {
   }
   return { colors, fonts: [...fonts] };
 }
+
+// Unlike binary media, HTML can yield useful observations before a size limit.
+// Keep the prefix, cancel the stream and explicitly record limited coverage.
+export async function readTextPrefix(response: Response, limit = 2500000) {
+  const reader = response.body?.getReader();
+  if (!reader) return { text: '', truncated: false };
+  const decoder = new TextDecoder();
+  let text = '',
+    size = 0,
+    truncated = false;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const available = limit - size;
+      text += decoder.decode(value.subarray(0, available), { stream: true });
+      size += value.length;
+      if (size >= limit) {
+        truncated = true;
+        await reader.cancel();
+        break;
+      }
+    }
+    text += decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+  return { text, truncated };
+}
 async function readPublic(url: string, type: 'html' | 'css' | 'xml') {
-  const result = await publicFetch(url);
+  const result = await publicFetch(url, type === 'html' ? 12000 : 6000);
   const mime = result.response.headers.get('content-type') ?? '';
-  if (type === 'html' && !/text\/html|application\/xhtml\+xml/i.test(mime))
+  if (type === 'html' && !/text\/html|application\/xhtml\+xml/i.test(mime)) {
+    await result.response.body?.cancel();
     throw new Error('This address did not return an HTML page.');
-  if (type === 'css' && !/text\/css/i.test(mime))
+  }
+  if (type === 'css' && !/text\/css/i.test(mime)) {
+    await result.response.body?.cancel();
     throw new Error('Stylesheet was not accessible as CSS.');
+  }
   return {
     url: result.url,
-    text: new TextDecoder().decode(
-      await boundedBytes(result.response, type === 'html' ? 1500000 : 500000),
-    ),
+    ...(await readTextPrefix(
+      result.response,
+      type === 'html' ? 2500000 : 500000,
+    )),
   };
 }
-export async function crawlWebsite(raw: string) {
+type Page = ReturnType<typeof parsePage>;
+type Observation = {
+  page: Page;
+  method: 'dom' | 'research';
+  truncated: boolean;
+  retrieval: string;
+};
+const challenge = (page: Page) =>
+  /^(just a moment|access denied|attention required|checking your browser|verify you are human|please wait)(\b|[.!])/i.test(
+    page.title.trim(),
+  );
+const usable = (page: Page) =>
+  !challenge(page) &&
+  !!(page.description || page.paragraphs.length || page.text.length > 80);
+const message = (error: unknown) =>
+  error instanceof Error ? error.message : 'Page could not be read';
+const escape = (value: string) =>
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+
+async function readerFallback(url: string): Promise<Observation> {
+  // Public URL only; no cookies, credentials, user files or paid keys are sent.
+  await validatePublicUrl(url);
+  const response = await fetch('https://r.jina.ai/' + url, {
+    headers: {
+      accept: 'application/json',
+      'x-no-cache': 'true',
+      'x-with-generated-alt': 'false',
+    },
+    signal: AbortSignal.timeout(18000),
+    redirect: 'error',
+  });
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error(`Public reader unavailable (${response.status}).`);
+  }
+  const result = JSON.parse(
+    new TextDecoder().decode(await boundedBytes(response, 1500000)),
+  ) as {
+    code?: number;
+    data?: {
+      title?: string;
+      description?: string;
+      url?: string;
+      content?: string;
+      httpStatus?: number;
+      warning?: string;
+    };
+  };
+  const data = result.data;
+  if (
+    !data ||
+    (result.code && result.code !== 200) ||
+    (data.httpStatus && data.httpStatus >= 400) ||
+    typeof data.content !== 'string'
+  )
+    throw new Error(
+      'The public reader did not return accessible page content.',
+    );
+  const sourceUrl = await validatePublicUrl(data.url || url);
+  if (
+    new URL(sourceUrl).hostname.replace(/^www\./, '') !==
+    new URL(url).hostname.replace(/^www\./, '')
+  )
+    throw new Error('The reader returned a different website.');
+  const paragraphs = data.content
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .split(/\n\s*\n/)
+    .slice(0, 80);
+  const page = parsePage(
+    `<html><head><title>${escape(data.title || '')}</title><meta name="description" content="${escape(data.description || '')}"></head><body><main>${paragraphs.map((p) => `<p>${escape(p.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1'))}</p>`).join('')}</main></body></html>`,
+    sourceUrl,
+  );
+  page.links = [
+    ...data.content.matchAll(/\[[^\]]+\]\((https?:\/\/[^)\s]+)\)/g),
+  ].flatMap((m) => safeLink(m[1], sourceUrl) ?? []);
+  if (!usable(page))
+    throw new Error('The public reader returned a challenge or an empty page.');
+  return {
+    page,
+    method: 'research',
+    truncated: paragraphs.length >= 80,
+    retrieval: `Public reader (Jina); retrieved ${new Date().toISOString()}${data.warning ? '. ' + data.warning : ''}`,
+  };
+}
+
+export async function crawlWebsite(
+  raw: string,
+  onProgress?: (result: ScanResult) => void,
+) {
   const start = normalizeUrl(
     /^https?:\/\//i.test(raw.trim()) ? raw.trim() : 'https://' + raw.trim(),
   );
-  const root = await readPublic(start, 'html');
-  const host = new URL(root.url).hostname;
-  const discovered = new Set([root.url]);
-  const visited = new Set<string>();
-  const failed: string[] = [];
-  const excluded: string[] = [];
-  const warnings: string[] = [];
-  const pages: ReturnType<typeof parsePage>[] = [];
+  // Validate before any fallback or discovery, including a failed first fetch.
+  await validatePublicUrl(start);
+  const deadline = Date.now() + 65000;
+  let base = start;
+  const discovered = new Set([start]),
+    visited = new Set<string>(),
+    completed = new Set<string>();
+  const failed: string[] = [],
+    excluded: string[] = [],
+    warnings: string[] = [];
+  const pages: Observation[] = [],
+    styles: ReturnType<typeof observedStyles>[] = [];
   const cssSeen = new Set<string>();
-  const styles: ReturnType<typeof observedStyles>[] = [];
-  const add = (u: string) => {
+  const sameSite = (url: string) =>
+    new URL(url).hostname.replace(/^www\./, '') ===
+    new URL(base).hostname.replace(/^www\./, '');
+  const add = (url: string) => {
     if (
-      new URL(u).hostname !== host ||
-      /\.(?:png|jpe?g|webp|gif|svg|pdf|zip|mp4|css|js)$/i.test(
-        new URL(u).pathname,
+      !sameSite(url) ||
+      /\.(?:png|jpe?g|webp|gif|svg|pdf|zip|mp4|css|js|woff2?)$/i.test(
+        new URL(url).pathname,
       )
     ) {
-      if (excluded.length < 100) excluded.push(u);
-      return;
-    }
-    if (discovered.size < 100) discovered.add(u);
+      if (excluded.length < 100 && !excluded.includes(url)) excluded.push(url);
+    } else if (discovered.size < 100) discovered.add(url);
   };
-  try {
-    const sitemap = await readPublic(
-      new URL('/sitemap.xml', root.url).href,
-      'xml',
-    );
-    for (const m of sitemap.text.matchAll(/<loc>([^<]+)<\/loc>/gi)) {
-      const u = safeLink(plainText(m[1]), root.url);
-      if (u && !u.endsWith('.xml')) add(u);
-    }
-  } catch {
-    warnings.push('Sitemap unavailable; following public internal links.');
-  }
-  const queue = [root.url];
-  let rootPending = true;
-  const deadline = Date.now() + 55000;
-  while (queue.length && visited.size < 6 && Date.now() < deadline) {
-    const url = queue.shift()!;
-    if (visited.has(url)) continue;
+  const snapshot = () =>
+    assemble(pages, styles, discovered, visited, failed, excluded, warnings);
+  async function visit(url: string, isRoot = false) {
     visited.add(url);
+    let observation: Observation;
     try {
-      const fetched = rootPending ? root : await readPublic(url, 'html');
-      rootPending = false;
-      const page = parsePage(fetched.text, fetched.url);
-      pages.push(page);
-      styles.push(observedStyles(page.css, page.url));
-      for (const u of page.links) add(u);
-      for (const sheet of page.stylesheets.slice(0, 3)) {
-        if (cssSeen.has(sheet) || cssSeen.size >= 6 || Date.now() > deadline)
-          continue;
-        cssSeen.add(sheet);
-        try {
-          const css = await readPublic(sheet, 'css');
-          styles.push(observedStyles(css.text, css.url));
-        } catch {
-          warnings.push(`Could not read stylesheet: ${sheet}`);
+      let direct: Observation | undefined,
+        directError = '';
+      try {
+        const fetched = await readPublic(url, 'html');
+        direct = {
+          page: parsePage(fetched.text, fetched.url),
+          truncated: fetched.truncated,
+          method: 'dom',
+          retrieval: 'Direct website HTML',
+        };
+        if (challenge(direct.page)) {
+          direct = undefined;
+          throw new Error(
+            'The website returned an automated-access challenge.',
+          );
         }
+      } catch (e) {
+        directError = message(e);
       }
-    } catch (error) {
+      if (
+        (!direct || !usable(direct.page)) &&
+        isRoot &&
+        Date.now() < deadline - 18000
+      ) {
+        try {
+          const recovered = await readerFallback(url);
+          // Keep direct metadata/assets when the reader supplies missing visible copy.
+          if (direct) {
+            recovered.page = {
+              ...direct.page,
+              text: recovered.page.text,
+              paragraphs: recovered.page.paragraphs,
+              links: [
+                ...new Set([...direct.page.links, ...recovered.page.links]),
+              ],
+            };
+          }
+          observation = recovered;
+        } catch (e) {
+          if (!direct || !usable(direct.page))
+            throw new Error(
+              `${directError || 'No readable page content.'} ${message(e)}`,
+            );
+          observation = direct;
+        }
+      } else if (direct && usable(direct.page)) observation = direct;
+      else
+        throw new Error(
+          directError || 'No readable content in the returned page.',
+        );
+      if (isRoot) base = observation.page.url;
+      if (!sameSite(observation.page.url))
+        throw new Error('Page redirected outside the selected brand website.');
+      const finalUrl = observation.page.url;
+      visited.add(finalUrl);
+      discovered.add(finalUrl);
+      if (completed.has(finalUrl)) return;
+      completed.add(finalUrl);
+      pages.push(observation);
+      if (observation.truncated)
+        warnings.push(`Read a bounded portion of the large page: ${finalUrl}`);
+      for (const link of observation.page.links) add(link);
+      styles.push(observedStyles(observation.page.css, finalUrl));
+      onProgress?.(snapshot());
+      const sheets = observation.page.stylesheets
+        .filter((s) => !cssSeen.has(s))
+        .slice(0, Math.min(2, 5 - cssSeen.size));
+      if (Date.now() < deadline - 7000) {
+        await Promise.all(
+          sheets.map(async (sheet) => {
+            cssSeen.add(sheet);
+            try {
+              const css = await readPublic(sheet, 'css');
+              styles.push(observedStyles(css.text, css.url));
+              if (css.truncated)
+                warnings.push(`Stylesheet inventory is partial: ${sheet}`);
+            } catch {
+              warnings.push(`Stylesheet unavailable: ${sheet}`);
+            }
+          }),
+        );
+      }
+    } catch (e) {
       failed.push(url);
-      warnings.push(
-        `${url}: ${error instanceof Error ? error.message : 'Read failed'}`,
-      );
+      warnings.push(`${url}: ${message(e)}`);
     }
-    for (const u of discovered)
-      if (!visited.has(u) && !queue.includes(u)) queue.push(u);
   }
-  if (!pages.length) throw new Error('No website pages could be read.');
+  await visit(start, true);
+  // A sitemap can recover accessible pages even when the homepage is blocked.
+  const sitemaps = [new URL('/sitemap.xml', base).href];
+  const seenSitemaps = new Set<string>();
+  while (
+    sitemaps.length &&
+    seenSitemaps.size < 3 &&
+    Date.now() < deadline - 8000
+  ) {
+    const url = sitemaps.shift()!;
+    if (seenSitemaps.has(url)) continue;
+    seenSitemaps.add(url);
+    try {
+      const sitemap = await readPublic(url, 'xml');
+      const isIndex = /<(?:\w+:)?sitemapindex\b/i.test(sitemap.text);
+      for (const match of sitemap.text.matchAll(
+        /<(?:\w+:)?loc\b[^>]*>\s*([\s\S]*?)\s*<\/(?:\w+:)?loc>/gi,
+      )) {
+        const link = safeLink(
+          plainText(match[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')),
+          base,
+        );
+        if (!link || !sameSite(link)) continue;
+        if (isIndex) {
+          if (sitemaps.length < 3 && !seenSitemaps.has(link))
+            sitemaps.push(link);
+        } else add(link);
+      }
+    } catch {
+      /* Internal links remain a valid discovery path. */
+    }
+  }
+  // Read brand/about/product pages before legal pages and unbounded catalogs.
+  const rank = (url: string) =>
+    /about|story|brand|company/i.test(new URL(url).pathname)
+      ? 0
+      : /product|service|shop/i.test(new URL(url).pathname)
+        ? 1
+        : /privacy|terms|login|cart|account/i.test(new URL(url).pathname)
+          ? 9
+          : 3;
+  let attempts = 1;
+  while (attempts < 6 && Date.now() < deadline - 13000) {
+    const next = [...discovered]
+      .filter((u) => !visited.has(u))
+      .sort((a, b) => rank(a) - rank(b))[0];
+    if (!next) break;
+    await visit(next);
+    attempts++;
+  }
+  if (!pages.length)
+    throw new Error(
+      `No readable pages were returned by this website or the public reader. ${warnings[0] ?? 'Check the website address.'}`,
+    );
+  return snapshot();
+}
+
+function assemble(
+  pages: Observation[],
+  styles: ReturnType<typeof observedStyles>[],
+  discovered: Set<string>,
+  visited: Set<string>,
+  failed: string[],
+  excluded: string[],
+  warnings: string[],
+) {
   const now = new Date().toISOString();
-  const evidence: Evidence[] = pages.flatMap((p) => [
-    {
-      id: crypto.randomUUID(),
-      url: p.url,
-      excerpt: p.description || p.text.slice(0, 1500),
+  const evidence: Evidence[] = [];
+  const cite = (
+    p: Observation,
+    excerpt: string,
+    selector: string,
+    metadata = false,
+  ) => {
+    const id = crypto.randomUUID();
+    evidence.push({
+      id,
+      url: p.page.url,
+      excerpt,
+      selector,
       observedAt: now,
-      method: 'dom' as const,
-      confidence: 1,
-    },
-    ...[p.name, p.tagline, p.logo]
-      .filter((x): x is string => !!x)
-      .map((excerpt) => ({
-        id: crypto.randomUUID(),
-        url: p.url,
-        excerpt,
-        observedAt: now,
-        method: 'dom' as const,
-        confidence: 1,
-      })),
-  ]);
-  const colors = styles.flatMap((s) => s.colors);
-  const counts = new Map<string, number>();
-  for (const c of colors) counts.set(c.value, (counts.get(c.value) ?? 0) + 1);
+      method: metadata ? 'metadata' : p.method,
+      confidence: p.method === 'research' ? 0.85 : 1,
+    });
+    return id;
+  };
   const first = pages[0];
+  const identityEvidence: Record<string, string[]> = {};
+  for (const key of ['name', 'tagline', 'logo'] as const) {
+    if (first.page[key])
+      identityEvidence[key] = [
+        cite(
+          first,
+          first.page[key],
+          first.page.identity[key],
+          first.page.identity[key].includes('meta') ||
+            first.page.identity[key].includes('script'),
+        ),
+      ];
+  }
+  const overview: Finding[] = [];
+  const seenText = new Set<string>();
+  const pageResults = pages.map((p) => {
+    const snippets = p.page.description
+      ? [{ text: p.page.description, selector: 'description metadata' }]
+      : p.page.paragraphs.slice(0, 2);
+    const findings: Finding[] = snippets.map((s) => ({
+      text: s.text,
+      type: 'fact',
+      evidenceIds: [
+        cite(p, s.text, s.selector, s.selector === 'description metadata'),
+      ],
+    }));
+    for (const finding of findings)
+      if (overview.length < 4 && !seenText.has(finding.text)) {
+        seenText.add(finding.text);
+        overview.push(finding);
+      }
+    const seoIssues =
+      p.method === 'dom' && !p.truncated
+        ? [
+            ...(!p.page.title ? ['Missing page title'] : []),
+            ...(!p.page.description ? ['Missing description metadata'] : []),
+            ...(!p.page.h1.length
+              ? ['No H1 heading found in the returned HTML']
+              : []),
+          ]
+        : [];
+    return {
+      url: p.page.url,
+      title: p.page.title,
+      thumbnail: p.page.thumbnail,
+      retrieval: p.retrieval,
+      summary: {
+        summary: findings[0]?.text || p.page.text.slice(0, 900),
+        insights: findings.slice(1),
+        seoIssues,
+        headings: p.page.headings.slice(0, 8),
+        canonical: p.page.canonical,
+      },
+      evidence: evidence.filter((e) => e.url === p.page.url),
+    };
+  });
+  const colors = styles.flatMap((s) => s.colors).slice(0, 5000);
+  // Only explicit primary/brand declarations are palette candidates. Counting all
+  // CSS colors mistakes component demos, customer brands and themes for identity.
+  const palette = [
+    ...new Set(
+      colors
+        .filter((c) =>
+          /(?:--(?:color-)?(?:brand|primary)|\.brand(?:\W|$))/i.test(
+            c.selector,
+          ),
+        )
+        .map((c) => c.value),
+    ),
+  ].slice(0, 6);
   const coverage = {
     discovered: discovered.size,
     completed: pages.length,
@@ -254,18 +479,11 @@ export async function crawlWebsite(raw: string) {
   const dna: Omit<BrandDNA, 'brandId'> = {
     schemaVersion: 1,
     version: Date.now(),
-    name: first.name || first.title || null,
-    tagline: first.tagline,
-    logo: first.logo,
-    overview: first.description
-      ? [
-          {
-            text: first.description,
-            type: 'fact',
-            evidenceIds: [evidence[0].id],
-          },
-        ]
-      : [],
+    name: first.page.name,
+    tagline: first.page.tagline,
+    logo: first.page.logo,
+    identityEvidence,
+    overview,
     values: [],
     aesthetics: [],
     voice: [],
@@ -277,10 +495,7 @@ export async function crawlWebsite(raw: string) {
     recommendations: {},
     fonts: [...new Set(styles.flatMap((s) => s.fonts))],
     colors,
-    palette: [...counts]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
-      .map((x) => x[0]),
+    palette,
     evidence,
     coverage,
     createdAt: now,
@@ -288,26 +503,18 @@ export async function crawlWebsite(raw: string) {
   return {
     scan: {
       ...coverage,
-      completed: pages.map((p) => p.url),
-      failed,
-      excluded,
+      completed: pages.map((p) => p.page.url),
+      failed: [...failed],
+      excluded: [...excluded],
       queue: [...discovered].filter((u) => !visited.has(u)),
       agent: 2,
-      error:
-        'Basic HTML scan; JavaScript-rendered pages and computed styles are not included. ' +
-        warnings.join(' '),
+      warnings: [...new Set(warnings)],
+      coverageNote:
+        'Bounded public-page scan. CSS declarations are observed, not computed; unverified brand traits are left empty.',
+      error: null,
     },
     dna,
-    pages: pages.map((p) => ({
-      url: p.url,
-      summary: {
-        summary: p.description || p.text.slice(0, 900),
-        insights: [],
-        seoIssues: [
-          ...(!p.title ? ['Missing page title'] : []),
-          ...(!p.description ? ['Missing description metadata'] : []),
-        ],
-      },
-    })),
+    pages: pageResults,
   };
 }
+export type ScanResult = ReturnType<typeof assemble>;

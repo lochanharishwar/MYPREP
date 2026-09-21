@@ -51,6 +51,7 @@ export interface BrandDNA {
   name: string | null;
   tagline: string | null;
   logo: string | null;
+  identityEvidence?: Partial<Record<'name' | 'tagline' | 'logo', string[]>>;
   overview: Finding[];
   values: Finding[];
   aesthetics: Finding[];

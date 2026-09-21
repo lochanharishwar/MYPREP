@@ -30,6 +30,7 @@
     "embla-carousel-react": "8.5.2",
     "inngest": "^4.20.0",
     "input-otp": "1.4.2",
+    "linkedom": "^0.18.13",
     "lucide-react": "1.31.0",
     "react": "19.2.8",
     "react-day-picker": "9.8.1",
