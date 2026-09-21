@@ -522,6 +522,8 @@ export async function POST(
     }
     if (action === 'schedule') {
       approver();
+      required('INNGEST_EVENT_KEY');
+      required('INNGEST_SIGNING_KEY');
       const at = utcFromLocal(
         z.string().parse(body.localTime),
         z.string().parse(body.timezone),
@@ -572,6 +574,10 @@ export async function POST(
       approver();
       const id = uuid.parse(body.id);
       const command = z.enum(['cancel', 'reschedule']).parse(body.command);
+      if (command === 'reschedule') {
+        required('INNGEST_EVENT_KEY');
+        required('INNGEST_SIGNING_KEY');
+      }
       const at =
         command === 'reschedule'
           ? utcFromLocal(body.localTime, body.timezone)

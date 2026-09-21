@@ -21,7 +21,7 @@ import {
   Plus,
   LockKeyhole,
 } from 'lucide-react';
-import { WorkspaceProvider, useWorkspace } from './workspace-provider';
+import { useWorkspace } from './workspace-provider';
 import { ResourcePaging } from './resource-paging';
 import { WorkspaceSettings } from './workspace-settings';
 import { ThinkingIndicator } from './thinking-indicator';
@@ -131,9 +131,10 @@ function Dashboard() {
       }
       if (!brandId) throw new Error('Enter your brand website.');
       await w.mutate('scan', { brandId });
-      w.setNotice(
-        'Website analysis queued. Your brand findings will appear as evidence is collected.',
-      );
+      if (!w.localMode)
+        w.setNotice(
+          'Website analysis queued. Your brand findings will appear as evidence is collected.',
+        );
     } catch (e) {
       w.setNotice((e as Error).message);
     }
@@ -235,7 +236,9 @@ function Dashboard() {
             {scan.payload.error && (
               <p className="notice">{scan.payload.error}</p>
             )}
-            {['partial', 'blocked'].includes(scan.payload.status) && (
+            {['partial', 'blocked', 'interrupted'].includes(
+              scan.payload.status,
+            ) && (
               <button
                 className="secondary-btn spaced"
                 disabled={w.busy}
@@ -243,7 +246,7 @@ function Dashboard() {
                   void w.mutate('resume-scan', { id: scan.id }).catch(() => {})
                 }
               >
-                Resume analysis
+                {w.localMode ? 'Scan again' : 'Resume analysis'}
               </button>
             )}
           </section>
@@ -470,7 +473,7 @@ function Shell({ page }: { page: Page }) {
                 ? 'Local workspace settings'
                 : w.session
                   ? 'Your account'
-                  : 'Sign in'
+                  : 'Workspace settings'
             }
             onClick={() => w.setSettings(true)}
           >
@@ -554,9 +557,5 @@ function Shell({ page }: { page: Page }) {
   );
 }
 export function MarketingApp({ page }: { page: Page }) {
-  return (
-    <WorkspaceProvider>
-      <Shell page={page} />
-    </WorkspaceProvider>
-  );
+  return <Shell page={page} />;
 }

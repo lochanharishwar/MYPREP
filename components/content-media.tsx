@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useWorkspace } from './workspace-provider';
 import { VideoPreview } from './video-preview';
+import { loadLocalMedia } from '@/lib/local-media';
 import type { Entity, ContentVersion } from '@/lib/contracts';
 export function ContentMedia({ content }: { content: Entity<ContentVersion> }) {
   const { read } = useWorkspace();
@@ -20,6 +21,23 @@ export function ContentMedia({ content }: { content: Entity<ContentVersion> }) {
   useEffect(() => {
     if (directUrl) return;
     let active = true;
+    if (content.payload.assetPath?.startsWith('local-media:')) {
+      let localUrl = '';
+      void loadLocalMedia(content.payload.assetPath.slice(12))
+        .then((blob) => {
+          if (active) {
+            localUrl = URL.createObjectURL(blob);
+            setUrl(localUrl);
+          }
+        })
+        .catch((e) => {
+          if (active) setError((e as Error).message);
+        });
+      return () => {
+        active = false;
+        if (localUrl) URL.revokeObjectURL(localUrl);
+      };
+    }
     const el = container.current;
     if (!el) return;
     const observer = new IntersectionObserver(
@@ -28,6 +46,10 @@ export function ContentMedia({ content }: { content: Entity<ContentVersion> }) {
         observer.disconnect();
         void read<{ url: string }>('/api/media?id=' + content.id)
           .then((r) => {
+            if (!r?.url)
+              throw new Error(
+                'This image is unavailable. Generate a new version.',
+              );
             if (active && r?.url) setUrl(r.url);
           })
           .catch((e) => {
@@ -41,7 +63,7 @@ export function ContentMedia({ content }: { content: Entity<ContentVersion> }) {
       active = false;
       observer.disconnect();
     };
-  }, [content.id, directUrl, read, revision]);
+  }, [content.id, content.payload.assetPath, directUrl, read, revision]);
   return (
     <div ref={container}>
       {activeUrl ? (

@@ -14,7 +14,21 @@ import {
   type SupabaseClient,
   type Session,
 } from '@supabase/supabase-js';
-import type { WorkspaceState, Entity } from '@/lib/contracts';
+import {
+  campaignSchema,
+  type WorkspaceState,
+  type Entity,
+  type BrandDNA,
+  type ContentVersion,
+} from '@/lib/contracts';
+import { contentHash, normalizeUrl } from '@/lib/domain';
+import {
+  loadLocalState,
+  saveLocalState,
+  readLocalResources,
+  recoverLocalState,
+} from '@/lib/local-state';
+import { storeLocalMedia, deleteLocalMedia } from '@/lib/local-media';
 const empty: WorkspaceState = {
   configured: false,
   authenticated: false,
@@ -95,10 +109,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const epoch = useRef(0);
   const jobIdCursor = useRef('');
   const pendingCommands = useRef(new Map<string, string>());
+  const localRunning = useRef(false);
   const localSnapshot = useRef({ state: empty, resources: [] as Entity[] });
-  useEffect(() => {
-    localSnapshot.current = { state, resources };
-  }, [state, resources]);
+
   useEffect(() => {
     let disposed = false;
     let unsubscribe: (() => void) | undefined;
@@ -108,6 +121,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           r.json() as Promise<{
             supabaseUrl: string;
             supabaseKey: string;
+            workspaceMode: 'browser' | 'server';
             services: WorkspaceState['services'];
           }>,
       )
@@ -118,7 +132,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           services: config.services,
           configured: !!config.supabaseUrl,
         }));
-        if (config.supabaseUrl && config.supabaseKey) {
+        if (
+          config.workspaceMode !== 'browser' &&
+          config.supabaseUrl &&
+          config.supabaseKey
+        ) {
           const c = createClient(config.supabaseUrl, config.supabaseKey);
           setClient(c);
           void c.auth.getSession().then(({ data }) => {
@@ -144,14 +162,25 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         } else {
           setLocalMode(true);
           try {
-            const saved = JSON.parse(
-              localStorage.getItem('bc_local_workspace_v1') ?? 'null',
-            ) as { state?: WorkspaceState; resources?: Entity[] } | null;
+            const loaded = loadLocalState(localStorage);
+            const saved = loaded ? recoverLocalState(loaded) : null;
             if (saved?.state?.workspace) {
+              localSnapshot.current = {
+                state: { ...saved.state, services: config.services },
+                resources: saved.resources,
+              };
+              saveLocalState(localStorage, localSnapshot.current);
               setState({ ...saved.state, services: config.services });
               setResources(saved.resources ?? []);
               setWorkspace(saved.state.workspace.id);
-              setBrand(saved.state.brands[0]?.id ?? '');
+              const selected = localStorage.getItem(
+                'bc_brand:' + saved.state.workspace.id,
+              );
+              setBrand(
+                saved.state.brands.find((b) => b.id === selected)?.id ??
+                  saved.state.brands[0]?.id ??
+                  '',
+              );
             } else {
               const id = crypto.randomUUID();
               const local = {
@@ -168,6 +197,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
                   { id, name: 'Local workspace', role: 'owner' as const },
                 ],
               };
+              localSnapshot.current = { state: local, resources: [] };
               setState(local);
               setWorkspace(id);
               localStorage.setItem(
@@ -203,7 +233,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
   const read = useCallback(
     async <T,>(url: string, options?: { signal?: AbortSignal }): Promise<T> => {
-      if (localMode) return { groups: [] } as T;
+      if (localMode) {
+        if (new URL(url, location.origin).pathname === '/api/resources')
+          return readLocalResources(localSnapshot.current, url) as T;
+        throw new Error(
+          'This feature needs the server workspace and a connected data source. Open Connections to check setup.',
+        );
+      }
       if (!client)
         throw new Error('Connect Supabase to access workspace data.');
       const { data } = await client.auth.getSession();
@@ -227,7 +263,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   );
   const loadResources = useCallback(
     async (kinds: string[], nextCursor?: string) => {
-      if (!brandId || (!client && !localMode)) return;
+      if (localMode || !brandId || !client) return;
       const requestedEpoch = epoch.current;
       const result = await read<{
         groups: {
@@ -369,7 +405,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     epoch.current++;
     setWorkspace(id);
     setBrand('');
-    setResources([]);
+    if (!localMode) setResources([]);
     setPages({});
     try {
       localStorage.setItem('bc_workspace', id);
@@ -378,215 +414,467 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const setBrandId = (id: string) => {
     epoch.current++;
     setBrand(id);
-    setResources([]);
+    if (!localMode) setResources([]);
     setPages({});
     try {
       localStorage.setItem('bc_brand:' + workspaceId, id);
     } catch {}
   };
-  async function mutate<T>(action: string, body: unknown): Promise<T> {
-    if (localMode) {
-      const request = body as Record<string, unknown>;
-      const text = (value: unknown, fallback = '') =>
-        typeof value === 'string' ? value : fallback;
-      const snapshot = localSnapshot.current;
-      const currentWorkspace = snapshot.state.workspace;
-      if (!currentWorkspace)
-        throw new Error('Local workspace is still loading.');
-      const save = (nextState: WorkspaceState, nextResources: Entity[]) => {
-        setState(nextState);
-        setResources(nextResources);
-        try {
-          localStorage.setItem(
-            'bc_local_workspace_v1',
-            JSON.stringify({ state: nextState, resources: nextResources }),
-          );
-        } catch {
-          setNotice('This result is visible now, but browser storage is full.');
-        }
-      };
+  async function mutateLocal<T>(action: string, body: unknown): Promise<T> {
+    const request = body as Record<string, unknown>;
+    const textValue = (v: unknown) => (typeof v === 'string' ? v : '');
+    const snapshot = () => localSnapshot.current;
+    const workspace = snapshot().state.workspace;
+    if (!workspace) throw new Error('Workspace is still loading.');
+    const save = (state: WorkspaceState, rows: Entity[]) => {
+      saveLocalState(localStorage, { state, resources: rows });
+      localSnapshot.current = { state, resources: rows };
+      setState(state);
+      setResources(rows);
+    };
+    const create = (
+      kind: string,
+      brand: string | null,
+      payload: Record<string, unknown>,
+    ): Entity => {
       const now = new Date().toISOString();
-      const create = (
-        kind: string,
-        brand: string | null,
-        payload: Record<string, unknown>,
-      ): Entity => ({
+      return {
         id: crypto.randomUUID(),
-        workspace_id: currentWorkspace.id,
+        workspace_id: workspace.id,
         brand_id: brand,
         kind,
         payload,
         created_at: now,
         updated_at: now,
-      });
-      if (action === 'brands') {
-        const website = new URL(text(request.url)).toString();
-        const brand = {
-          id: crypto.randomUUID(),
-          workspace_id: currentWorkspace.id,
-          name: new URL(website).hostname,
-          website,
-        };
-        save(
-          { ...snapshot.state, brands: [...snapshot.state.brands, brand] },
-          snapshot.resources,
-        );
-        return brand as T;
-      }
-      if (action === 'settings') {
-        const workspace = {
-          ...currentWorkspace,
-          name: text(request.name, currentWorkspace.name),
-          monthly_limit: Number(
-            request.monthlyLimit ?? currentWorkspace.monthly_limit,
-          ),
-        };
-        save(
-          {
-            ...snapshot.state,
-            workspace,
-            workspaces: [
-              { id: workspace.id, name: workspace.name, role: workspace.role },
-            ],
-          },
-          snapshot.resources,
-        );
-        return { saved: true } as T;
-      }
-      if (action === 'scan') {
-        const targetBrand = text(request.brandId, brandId);
-        const brand = snapshot.state.brands.find(
-          (item) => item.id === targetBrand,
-        );
-        if (!brand) throw new Error('Enter a brand website first.');
-        const scan = create('scan', targetBrand, {
-          url: brand.website,
-          status: 'running',
-          queue: [],
-          completed: [],
-          failed: [],
-          excluded: [],
-          discovered: 0,
-          batch: 0,
-          agent: 1,
-        });
-        save(snapshot.state, [scan, ...snapshot.resources]);
-        setPending((n) => n + 1);
-        try {
-          const response = await fetch('/api/local/scan', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ url: brand.website }),
-          });
-          const result = (await response.json()) as {
-            error?: string;
-            scan?: Record<string, unknown>;
-            dna?: Record<string, unknown>;
-          };
-          if (!response.ok || !result.scan || !result.dna)
-            throw new Error(result.error ?? 'Website analysis failed.');
-          const nextScan = {
-            ...scan,
-            payload: { ...scan.payload, ...result.scan, agent: 2 },
-          };
-          const dna = create('dna', targetBrand, {
-            ...result.dna,
-            brandId: targetBrand,
-          });
-          const next = [dna, nextScan, ...snapshot.resources];
-          save(snapshot.state, next);
-          return { jobId: scan.id } as T;
-        } finally {
-          setPending((n) => n - 1);
-        }
-      }
-      if (action === 'campaign') {
-        const targetBrand = text(request.brandId, brandId);
-        const dna = snapshot.resources.find(
-          (item) => item.kind === 'dna' && item.brand_id === targetBrand,
-        );
-        if (!dna)
-          throw new Error('Analyze your website before generating content.');
-        const campaign = create('campaign', targetBrand, {
-          ...request,
-          status: 'generating',
-          agent: 3,
-          dnaId: dna.id,
-        });
-        save(snapshot.state, [campaign, ...snapshot.resources]);
-        setPending((n) => n + 1);
-        try {
-          const response = await fetch('/api/local/generate', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ ...request, brand: dna.payload }),
-          });
-          const result = (await response.json()) as {
-            error?: string;
-            caption?: string;
-            image?: { data: string; mimeType: string } | null;
-            review?: Record<string, unknown>;
-          };
-          if (!response.ok || !result.caption || !result.review)
-            throw new Error(result.error ?? 'Generation failed.');
-          const formats = Array.isArray(request.formats) ? request.formats : [];
-          const platforms = Array.isArray(request.platforms)
-            ? request.platforms
-            : [];
-          const assetUrl =
-            result.image && result.image.data
-              ? result.image.data.startsWith('data:')
-                ? result.image.data
-                : `data:${result.image.mimeType || 'image/svg+xml'};base64,${result.image.data}`
-              : undefined;
-          const content = platforms.flatMap((platform) =>
-            formats
-              .filter((format) => format !== 'video')
-              .map((format) => {
-                const isImage = format === 'image';
-                const mediaUrl = isImage ? assetUrl : undefined;
-                return create('content', targetBrand, {
-                  campaignId: campaign.id,
-                  dnaId: dna.id,
-                  format,
-                  platform,
-                  caption: result.caption,
-                  assetPath: mediaUrl ? 'browser-storage' : null,
-                  assetUrl: mediaUrl,
-                  mimeType: isImage ? (result.image?.mimeType ?? null) : null,
-                  review: result.review,
-                  status: result.review?.passed
-                    ? 'qualified'
-                    : 'needs_revision',
-                  contentHash: crypto.randomUUID(),
-                  attempt: 1,
-                });
-              }),
-          );
-          const completedCampaign = {
-            ...campaign,
-            payload: { ...campaign.payload, status: 'completed', agent: 4 },
-          };
-          save(snapshot.state, [
-            ...content,
-            completedCampaign,
-            ...snapshot.resources,
-          ]);
-          return { jobId: campaign.id } as T;
-        } finally {
-          setPending((n) => n - 1);
-        }
-      }
-      if (action === 'decision' && request.decision === 'reject') {
-        save(
-          snapshot.state,
-          snapshot.resources.filter((item) => item.id !== request.id),
-        );
-        return { deleted: true } as T;
-      }
-      throw new Error(
-        `${action} requires the secure Supabase workspace. Local mode supports brand discovery and text/image generation only.`,
+      };
+    };
+    const put = (...rows: Entity[]) =>
+      save(snapshot().state, [
+        ...rows,
+        ...snapshot().resources.filter((r) => !rows.some((n) => n.id === r.id)),
+      ]);
+    const record = (id: unknown, kind: string) => {
+      const value = snapshot().resources.find(
+        (r) =>
+          r.id === id && r.kind === kind && r.workspace_id === workspace.id,
       );
+      if (!value)
+        throw new Error('Saved record was not found. Refresh and retry.');
+      return value;
+    };
+    const post = async <R,>(path: string, input: unknown): Promise<R> => {
+      const response = await fetch(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(input),
+        signal: AbortSignal.timeout(300000),
+      });
+      const result = (await response.json()) as R & { error?: string };
+      if (!response.ok)
+        throw new Error(result.error ?? 'Server request failed.');
+      return result;
+    };
+    if (action === 'brands') {
+      const raw = typeof request.url === 'string' ? request.url.trim() : '';
+      const website = normalizeUrl(
+        /^https?:\/\//i.test(raw) ? raw : 'https://' + raw,
+      );
+      const old = snapshot().state.brands.find((b) => b.website === website);
+      if (old) return old as T;
+      const brand = {
+        id: crypto.randomUUID(),
+        workspace_id: workspace.id,
+        website,
+        name: new URL(website).hostname,
+      };
+      save(
+        { ...snapshot().state, brands: [...snapshot().state.brands, brand] },
+        snapshot().resources,
+      );
+      return brand as T;
+    }
+    if (action === 'settings') {
+      const limit = Number(request.monthlyLimit);
+      if (!Number.isFinite(limit) || limit < 0)
+        throw new Error('Enter a valid monthly spending limit.');
+      save(
+        {
+          ...snapshot().state,
+          workspace: { ...workspace, monthly_limit: limit },
+        },
+        snapshot().resources,
+      );
+      return { saved: true } as T;
+    }
+    if (action === 'dna') {
+      const old = record(request.id, 'dna');
+      const correction = request.correction as {
+        name: string | null;
+        tagline: string | null;
+      };
+      if (
+        !correction ||
+        [correction.name, correction.tagline].some(
+          (v) => v !== null && typeof v !== 'string',
+        )
+      )
+        throw new Error('Enter a name and tagline correction.');
+      const dna = old.payload as unknown as BrandDNA;
+      const id = crypto.randomUUID();
+      const next = create('dna', old.brand_id, {
+        ...dna,
+        ...correction,
+        version: Date.now(),
+        createdAt: new Date().toISOString(),
+        governance: undefined,
+        evidence: [
+          ...dna.evidence,
+          {
+            id,
+            url: 'user:correction',
+            excerpt: JSON.stringify(correction),
+            observedAt: new Date().toISOString(),
+            method: 'user',
+            confidence: 1,
+          },
+        ],
+        overview: [
+          ...dna.overview,
+          {
+            text: 'Name and tagline corrected by you.',
+            type: 'correction',
+            evidenceIds: [id],
+          },
+        ],
+      });
+      put(next);
+      return next as T;
+    }
+    if (action === 'scan' || action === 'resume-scan') {
+      const target =
+        action === 'resume-scan'
+          ? record(request.id, 'scan').brand_id
+          : request.brandId;
+      const brand = snapshot().state.brands.find((b) => b.id === target);
+      if (!brand) throw new Error('Enter a brand website first.');
+      const scan = create('scan', brand.id, {
+        status: 'running',
+        url: brand.website,
+        completed: [],
+        failed: [],
+        excluded: [],
+        discovered: 0,
+        agent: 1,
+      });
+      put(scan);
+      try {
+        const result = await post<{
+          scan: Record<string, unknown>;
+          dna: BrandDNA;
+          pages: Record<string, unknown>[];
+        }>('/api/local/scan', { url: brand.website });
+        put(
+          create('dna', brand.id, { ...result.dna, brandId: brand.id }),
+          { ...scan, payload: { ...scan.payload, ...result.scan } },
+          ...(result.pages ?? []).map((p) => {
+            const old = snapshot().resources.find(
+              (r) =>
+                r.kind === 'page' &&
+                r.brand_id === brand.id &&
+                r.payload.url === p.url,
+            );
+            return {
+              ...create('page', brand.id, p),
+              ...(old ? { id: old.id } : {}),
+            };
+          }),
+        );
+        setNotice(
+          `Read ${result.dna.coverage.completed} pages. Your observed Brand DNA is saved; coverage limits are shown below.`,
+        );
+        return { jobId: scan.id } as T;
+      } catch (e) {
+        put({
+          ...scan,
+          payload: {
+            ...scan.payload,
+            status: 'blocked',
+            error: e instanceof Error ? e.message : 'Scan failed.',
+          },
+        });
+        throw e;
+      }
+    }
+    if (action === 'decision' && request.decision === 'reject') {
+      const content = record(request.id, 'content');
+      save(
+        snapshot().state,
+        snapshot().resources.filter((r) => r.id !== content.id),
+      );
+      if (
+        typeof content.payload.assetPath === 'string' &&
+        content.payload.assetPath.startsWith('local-media:')
+      )
+        await deleteLocalMedia(content.payload.assetPath.slice(12));
+      return { deleted: true } as T;
+    }
+    if (
+      action === 'campaign' ||
+      (action === 'decision' &&
+        ['redo', 'edit'].includes(String(request.decision)))
+    ) {
+      const previous =
+        action === 'decision' ? record(request.id, 'content') : null;
+      const original = previous
+        ? record(previous.payload.campaignId, 'campaign')
+        : null;
+      const input = campaignSchema.parse(
+        original
+          ? {
+              ...original.payload,
+              formats: [previous!.payload.format],
+              platforms: [previous!.payload.platform],
+              direction: `${textValue(original.payload.direction)}\nRevision: ${textValue(request.feedback ?? request.caption)}`,
+            }
+          : request,
+      );
+      const dna = record(
+        original?.payload.dnaId ??
+          snapshot().resources.find(
+            (r) => r.kind === 'dna' && r.brand_id === input.brandId,
+          )?.id,
+        'dna',
+      );
+      if (
+        (dna.payload.evidence as { excerpt: string }[]).some((e) =>
+          /synthesized|generated locally|Local Intelligence Profile/i.test(
+            e.excerpt,
+          ),
+        )
+      )
+        throw new Error(
+          'Re-scan this brand. Its older profile was created by an unverified fallback.',
+        );
+      const config = (await fetch('/api/config').then((r) => r.json())) as {
+        generation: {
+          ready: boolean;
+          textCost: number;
+          imageCost: number;
+          model: string;
+          reviewModel: string;
+          imageModel: string;
+        };
+      };
+      if (!config.generation?.ready)
+        throw new Error(
+          'Image and text creation need your Gemini API key on the server. Open Connections for setup; no image has been generated.',
+        );
+      if (!workspace.monthly_limit)
+        throw new Error(
+          'Set your monthly automation limit in Workspace settings before paid generation.',
+        );
+      if (input.formats.includes('video'))
+        throw new Error(
+          'Video needs the media processor and durable server workflow. Choose image or text here.',
+        );
+      const supported: Record<string, string[]> = {
+        instagram: ['image'],
+        youtube: [],
+        x: ['text', 'image'],
+        linkedin: ['text', 'image'],
+        reddit: ['text', 'image'],
+      };
+      const pairs = input.platforms.flatMap((platform) =>
+        input.formats
+          .filter((format) => supported[platform].includes(format))
+          .map((format) => ({ platform, format })),
+      );
+      if (!pairs.length)
+        throw new Error(
+          'No selected platform supports these formats. YouTube requires video.',
+        );
+      const campaign = create('campaign', input.brandId, {
+        ...input,
+        dnaId: dna.id,
+        status: 'generating',
+        agent: 3,
+        estimatedCostUSD: 0,
+        budgetCampaignId: original?.payload.budgetCampaignId ?? original?.id,
+        referenceUrl:
+          request.referenceUrl ?? original?.payload.referenceUrl ?? '',
+      });
+      const budgetId =
+        textValue(campaign.payload.budgetCampaignId) || campaign.id;
+      campaign.payload.budgetCampaignId = budgetId;
+      put(campaign);
+      let qualified = 0;
+      let lastFeedback: string[] = [];
+      try {
+        for (const pair of pairs) {
+          let feedback: string[] = [];
+          for (let attempt = 1; attempt <= 5; attempt++) {
+            const estimate =
+              2 * config.generation.textCost +
+              (pair.format === 'image' ? config.generation.imageCost : 0);
+            if (
+              !Number.isFinite(config.generation.textCost) ||
+              config.generation.textCost <= 0 ||
+              (pair.format === 'image' &&
+                (!Number.isFinite(config.generation.imageCost) ||
+                  config.generation.imageCost <= 0))
+            )
+              throw new Error(
+                'Configure positive conservative COST_TEXT and COST_IMAGE estimates before paid generation.',
+              );
+            const month = new Date().toISOString().slice(0, 7);
+            const prior = snapshot().state.budget;
+            const spent = prior?.periodStart.startsWith(month)
+              ? prior.reservedUSD
+              : 0;
+            const campaignSpend = snapshot()
+              .resources.filter(
+                (r) =>
+                  r.kind === 'campaign' &&
+                  r.payload.budgetCampaignId === budgetId,
+              )
+              .reduce((n, r) => n + Number(r.payload.estimatedCostUSD ?? 0), 0);
+            if (
+              spent + estimate > workspace.monthly_limit ||
+              campaignSpend + estimate > input.budget
+            )
+              throw new Error(
+                'The next attempt would exceed your spending limit. Review existing output or increase the limit.',
+              );
+            campaign.payload = {
+              ...campaign.payload,
+              status: 'generating',
+              attempt,
+              estimatedCostUSD:
+                Number(campaign.payload.estimatedCostUSD) + estimate,
+            };
+            save(
+              {
+                ...snapshot().state,
+                budget: {
+                  reservedUSD: spent + estimate,
+                  estimated: true,
+                  periodStart: month + '-01',
+                },
+              },
+              snapshot().resources.map((r) =>
+                r.id === campaign.id ? { ...campaign } : r,
+              ),
+            );
+            const result = await post<{
+              caption: string;
+              image: { data: string; mimeType: string } | null;
+              review: ContentVersion['review'];
+            }>('/api/local/generate', {
+              ...input,
+              formats: [pair.format],
+              platforms: [pair.platform],
+              brand: dna.payload,
+              attempt,
+              feedback,
+              referenceUrl: campaign.payload.referenceUrl,
+            });
+            feedback = result.review.feedback;
+            lastFeedback = feedback;
+            if (!result.review.passed) continue;
+            if (pair.format === 'image' && !result.image)
+              throw new Error('The provider returned no image.');
+            const id = crypto.randomUUID();
+            const assetPath = result.image
+              ? await storeLocalMedia(id, result.image)
+              : null;
+            const payload = {
+              campaignId: campaign.id,
+              dnaId: dna.id,
+              ...pair,
+              caption: result.caption,
+              assetPath,
+              mimeType: result.image?.mimeType ?? null,
+              review: result.review,
+              status: 'qualified',
+              attempt,
+              provenance: {
+                generationModel:
+                  pair.format === 'image'
+                    ? config.generation.imageModel
+                    : config.generation.model,
+                reviewModel: config.generation.reviewModel,
+                generationPrompt: 'local-creative-3',
+                reviewPrompt: 'finished-media-3',
+                rubric: 'weighted-35-25-20-20-v1',
+                policy: 'observed-facts',
+                dnaVersion: Number(dna.payload.version),
+              },
+            };
+            put({
+              ...create('content', input.brandId, {
+                ...payload,
+                contentHash: await contentHash(payload as ContentVersion),
+              }),
+              id,
+            });
+            qualified++;
+            break;
+          }
+        }
+        put({
+          ...campaign,
+          payload: {
+            ...campaign.payload,
+            status: qualified === pairs.length ? 'completed' : 'needs_revision',
+            error:
+              qualified === pairs.length
+                ? undefined
+                : `${qualified}/${pairs.length} variants qualified. ${lastFeedback.join(' ')}`,
+            agent: 4,
+          },
+        });
+        setNotice(
+          `${qualified}/${pairs.length} finished platform versions passed review.`,
+        );
+        return { jobId: campaign.id } as T;
+      } catch (e) {
+        put({
+          ...campaign,
+          payload: {
+            ...campaign.payload,
+            status: 'blocked',
+            error: e instanceof Error ? e.message : 'Generation failed.',
+          },
+        });
+        throw e;
+      }
+    }
+    throw new Error(
+      'This action needs a durable server workspace and a connected account. Check Connections for the remaining setup.',
+    );
+  }
+  async function mutate<T>(action: string, body: unknown): Promise<T> {
+    if (localMode) {
+      if (localRunning.current)
+        throw new Error('Wait for the current operation to finish.');
+      localRunning.current = true;
+      setPending((n) => n + 1);
+      try {
+        const run = async () => {
+          const latest = loadLocalState(localStorage);
+          if (latest) localSnapshot.current = latest;
+          return mutateLocal<T>(action, body);
+        };
+        return navigator.locks
+          ? await navigator.locks.request('bc-workspace-mutation', run)
+          : await run();
+      } catch (e) {
+        setNotice(e instanceof Error ? e.message : 'Local operation failed.');
+        throw e;
+      } finally {
+        localRunning.current = false;
+        setPending((n) => n - 1);
+      }
     }
     if (!client || !session) {
       setSettings(true);

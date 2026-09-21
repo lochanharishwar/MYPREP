@@ -1,4 +1,6 @@
 import 'server-only';
+import { publicFetch } from './public-fetch';
+import { geminiImage } from './gemini-client';
 import { boundedBytes } from './http';
 import { env, required } from './env';
 import { reserve, type BillingContext } from './billing';
@@ -235,7 +237,7 @@ export async function visualStyleFallback(
     throw new Error('No screenshot is available for visual fallback.');
   await validatePublicUrl(page.screenshot);
   const r = await fetch(page.screenshot, {
-    redirect: 'error',
+    redirect: 'manual',
     signal: AbortSignal.timeout(30000),
   });
   if (!r.ok) throw new Error('Screenshot unavailable.');
@@ -287,106 +289,21 @@ export async function generateImage(
   prompt: string,
   referenceUrls: string[] = [],
 ) {
+  required('GEMINI_API_KEY');
   await reserve(ctx, 'IMAGE');
-  const refs: unknown[] = [];
-  for (const url of referenceUrls.slice(0, 2)) {
-    try {
-      await validatePublicUrl(url);
-      const r = await fetch(url, {
-        redirect: 'error',
-        signal: AbortSignal.timeout(10000),
-      });
-      if (!r.ok) continue;
-      const mime = r.headers.get('content-type')?.split(';')[0];
-      if (
-        !mime ||
-        !['image/png', 'image/jpeg', 'image/webp'].includes(mime) ||
-        Number(r.headers.get('content-length')) > 8000000
-      )
-        continue;
-      const bytes = await boundedBytes(r, 18000000);
-      if (bytes.length > 8000000) continue;
-      refs.push({
-        inlineData: {
-          mimeType: mime,
-          data: Buffer.from(bytes).toString('base64'),
-        },
-      });
-    } catch {}
-  }
-
-  const model = env('GEMINI_IMAGE_MODEL', 'imagen-3.0-generate-002');
-  let imageBytes: Uint8Array | null = null;
-  let mimeType = 'image/jpeg';
-
-  const key = env('GEMINI_API_KEY');
-  if (key) {
-    try {
-      const result = await providerJSON<{
-        predictions?: { bytesBase64Encoded?: string; mimeType?: string }[];
-      }>(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model.startsWith('gemini') ? 'imagen-3.0-generate-002' : model}:predict`,
-        {
-          method: 'POST',
-          headers: {
-            'x-goog-api-key': key,
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({
-            instances: [{ prompt }],
-            parameters: {
-              sampleCount: 1,
-              aspectRatio: '1:1',
-              outputMimeType: 'image/jpeg',
-            },
-          }),
-        },
-        30000,
-      );
-      const p = result.predictions?.[0];
-      if (p?.bytesBase64Encoded) {
-        imageBytes = Uint8Array.from(Buffer.from(p.bytesBase64Encoded, 'base64'));
-        mimeType = p.mimeType || 'image/jpeg';
-      }
-    } catch {}
-  }
-
-  if (!imageBytes) {
-    const cleanPrompt = prompt
-      .slice(0, 80)
-      .replace(/[<>&"']/g, '');
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" width="1080" height="1080">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0F172A" />
-      <stop offset="50%" stop-color="#1E293B" />
-      <stop offset="100%" stop-color="#020617" />
-    </linearGradient>
-    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#3B82F6" />
-      <stop offset="100%" stop-color="#8B5CF6" />
-    </linearGradient>
-  </defs>
-  <rect width="1080" height="1080" fill="url(#bg)" />
-  <circle cx="800" cy="300" r="400" fill="#3B82F6" opacity="0.25" filter="blur(60px)" />
-  <circle cx="300" cy="800" r="300" fill="#8B5CF6" opacity="0.2" filter="blur(60px)" />
-  <rect x="80" y="80" width="920" height="920" rx="32" fill="#ffffff" fill-opacity="0.04" stroke="#ffffff" stroke-opacity="0.1" stroke-width="2" />
-  <text x="140" y="240" font-family="system-ui,sans-serif" font-size="32" font-weight="700" fill="#3B82F6" letter-spacing="2">BRAND VISUAL ASSET</text>
-  <text x="140" y="360" font-family="system-ui,sans-serif" font-size="44" font-weight="800" fill="#ffffff">${cleanPrompt}</text>
-  <text x="140" y="440" font-family="system-ui,sans-serif" font-size="24" font-weight="500" fill="#94A3B8">High resolution platform graphic</text>
-</svg>`;
-    imageBytes = new TextEncoder().encode(svg);
-    mimeType = 'image/svg+xml';
-  }
-
+  const image = await geminiImage(
+    prompt,
+    referenceUrls,
+    prompt.includes('4:5') ? '4:5' : '1:1',
+  );
   return {
     assetPath: await storeAsset(
       ctx.workspaceId,
       ctx.brandId,
-      imageBytes,
-      mimeType,
+      Uint8Array.from(Buffer.from(image.data, 'base64')),
+      image.mimeType,
     ),
-    mimeType,
+    mimeType: image.mimeType,
   };
 }
 export async function startVideo(ctx: BillingContext, prompt: string) {
@@ -404,7 +321,9 @@ export async function startVideo(ctx: BillingContext, prompt: string) {
         parameters: {
           aspectRatio: '9:16',
           durationSeconds: 8,
-          personGeneration: 'allow_adult',
+          ...(env('GEMINI_VIDEO_PERSON_GENERATION')
+            ? { personGeneration: env('GEMINI_VIDEO_PERSON_GENERATION') }
+            : {}),
           sampleCount: 1,
         },
       }),
@@ -431,14 +350,27 @@ export async function pollVideo(name: string) {
 }
 export async function saveVideo(ctx: BillingContext, url: string) {
   const u = new URL(url);
-  if (u.hostname !== 'generativelanguage.googleapis.com')
+  if (
+    u.protocol !== 'https:' ||
+    u.hostname !== 'generativelanguage.googleapis.com' ||
+    u.username ||
+    u.password
+  )
     throw new Error('Unexpected video download origin.');
-  const r = await fetch(url, {
+  let r = await fetch(url, {
     headers: { 'x-goog-api-key': required('GEMINI_API_KEY') },
-    redirect: 'error',
+    redirect: 'manual',
+    signal: AbortSignal.timeout(120000),
   });
+  if ([301, 302, 303, 307, 308].includes(r.status)) {
+    const location = r.headers.get('location');
+    await r.body?.cancel();
+    if (!location) throw new Error('Video download redirect was missing.');
+    // Signed public media redirects must never receive the Gemini API key.
+    r = (await publicFetch(new URL(location, url).href, 120000)).response;
+  }
   if (!r.ok) throw new Error('Video download failed.');
-  const bytes = await boundedBytes(r, 18000000);
+  const bytes = await boundedBytes(r, 100000000);
   if (bytes.length > 100000000)
     throw new Error('Video exceeds the supported transfer size.');
   return {

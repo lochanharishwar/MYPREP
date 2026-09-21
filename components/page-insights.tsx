@@ -201,7 +201,7 @@ export function PageInsights() {
           maxLength={200}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          disabled={!w.brandId || !w.session}
+          disabled={!w.brandId || (!w.session && !w.localMode)}
         />
         {query && (
           <button className="text-link" onClick={() => setQuery('')}>
@@ -213,9 +213,9 @@ export function PageInsights() {
         Search includes all stored page findings for this brand, including older
         pages.
       </p>
-      {w.brandId && w.session ? (
+      {w.brandId && (w.session || w.localMode) ? (
         <ResultsList
-          key={`${w.workspaceId}:${w.brandId}:${w.session.user.id}:${query.trim()}`}
+          key={`${w.workspaceId}:${w.brandId}:${w.session?.user.id ?? 'local'}:${query.trim()}`}
           query={query.trim()}
         />
       ) : (

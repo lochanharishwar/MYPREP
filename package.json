@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "vinext dev",
+    "local": "vinext dev --port 3000",
     "build": "vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",

@@ -1,4 +1,5 @@
 'use client';
+import { ActivationNotice } from './activation-notice';
 // Evidence and signed private storage URLs must bypass image optimization.
 /* oxlint-disable next/no-img-element */
 // The installed Recharts 3 release supports Cell for per-series colors.
@@ -104,7 +105,9 @@ export function Dropdown({
   return (
     <Select value={value} onValueChange={(v) => onChange(v ?? '')}>
       <SelectTrigger aria-label={label} className="min-w-36 h-10">
-        <SelectValue placeholder={label} />
+        <SelectValue placeholder={label}>
+          {options.find((option) => option.value === value)?.label ?? label}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {options.map((o) => (
@@ -292,7 +295,7 @@ export function BrandView() {
   return (
     <div className="stack">
       <DNACard />
-      {w.records<BrandDNA>('dna')[0] && (
+      {!w.localMode && w.records<BrandDNA>('dna')[0] && (
         <BrandGovernance
           key={w.records<BrandDNA>('dna')[0].id}
           record={w.records<BrandDNA>('dna')[0]}
@@ -363,7 +366,11 @@ export function BrandView() {
               Observed on the crawled pages. Visual estimates are labeled
               separately from computed styles.
             </p>
-            <div className="table-scroll spaced">
+            <div
+              className="table-scroll spaced"
+              style={{ maxHeight: 420, overflow: 'auto' }}
+              aria-label="Observed color inventory"
+            >
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -430,6 +437,7 @@ export function ContentView() {
     [scenario, setScenario] = useState(''),
     [event, setEvent] = useState(''),
     [direction, setDirection] = useState(''),
+    [referenceUrl, setReferenceUrl] = useState(''),
     [budget, setBudget] = useState('');
   const [selected, setSelected] = useState<Entity<ContentVersion> | null>(null),
     [account, setAccount] = useState(''),
@@ -460,6 +468,7 @@ export function ContentView() {
   return (
     <div className="stack">
       <section className="panel glass">
+        <ActivationNotice feature="generation" />
         <div className="section-title">
           <div>
             <span className="eyebrow">AGENTS 03 + 04</span>
@@ -482,12 +491,15 @@ export function ContentView() {
                 scenario,
                 event,
                 direction,
+                referenceUrl,
                 budget: Number(budget),
               })
-              .then(() =>
-                w.setNotice(
-                  'Campaign queued. Finished content will appear after it passes review.',
-                ),
+              .then(
+                () =>
+                  !w.localMode &&
+                  w.setNotice(
+                    'Campaign queued. Finished content will appear after it passes review.',
+                  ),
               )
               .catch(() => {});
           }}
@@ -519,6 +531,7 @@ export function ContentView() {
                     key={f.id}
                   >
                     <Checkbox
+                      disabled={w.localMode && f.id === 'video'}
                       checked={formats.includes(f.id)}
                       onCheckedChange={() => toggle(formats, f.id, setFormats)}
                     />
@@ -534,6 +547,7 @@ export function ContentView() {
                 {platforms.map((p) => (
                   <label key={p} className="row small">
                     <Checkbox
+                      disabled={w.localMode && p === 'youtube'}
                       checked={targets.includes(p)}
                       onCheckedChange={() => toggle(targets, p, setTargets)}
                     />
@@ -579,6 +593,15 @@ export function ContentView() {
               />
             </label>
             <label className="field span-2">
+              Product image reference URL
+              <input
+                type="url"
+                value={referenceUrl}
+                onChange={(e) => setReferenceUrl(e.target.value)}
+                placeholder="Optional public PNG, JPEG or WebP of your product"
+              />
+            </label>
+            <label className="field span-2">
               Creative direction
               <input
                 value={direction}
@@ -597,7 +620,8 @@ export function ContentView() {
               className="primary-btn"
               disabled={w.busy || !formats.length || !targets.length}
             >
-              <Sparkles size={16} /> Generate content
+              <Sparkles size={16} />{' '}
+              {w.busy ? 'Generating and reviewing…' : 'Generate content'}
             </button>
           </div>
         </form>
@@ -886,10 +910,15 @@ export function ScheduleView() {
             your audience.
           </p>
         </div>
-        <button className="primary-btn" onClick={() => open()}>
+        <button
+          className="primary-btn"
+          disabled={w.localMode || !unscheduled.length || w.busy}
+          onClick={() => open()}
+        >
           <CalendarDays size={16} /> Schedule content
         </button>
       </div>
+      <ActivationNotice feature="publishing" />
       <section className="panel">
         <Tabs defaultValue="list">
           <div className="section-title">
@@ -1001,7 +1030,11 @@ export function ScheduleView() {
               <Empty
                 icon={CalendarDays}
                 title="Room for your next big moment"
-                description="Approve a reviewed content version, then choose its destination, date, and time. Your schedule will stay active when you close the app."
+                description={
+                  w.localMode
+                    ? 'Activate the background publishing service and connect a destination before scheduling. Local drafts remain available in Content studio.'
+                    : 'Approve a reviewed content version, then choose its destination, date, and time. Your schedule will stay active when you close the app.'
+                }
               />
             )}
           </TabsContent>
@@ -1176,7 +1209,7 @@ export function AnalyticsView() {
   }>('metrics', { platform, campaign, metric });
   const latest = reportState.data?.latest ?? [];
   const observations = latest;
-  const total = (key: string) => reportState.data?.totals[key] ?? null;
+  const total = (key: string) => reportState.data?.totals?.[key] ?? null;
   const chart = reportState.data?.chart ?? [];
   const comparison = reportState.data?.comparison ?? [];
   return (
@@ -1206,6 +1239,7 @@ export function AnalyticsView() {
         />
       </div>
       <ReportControls report={reportState} />
+      <ActivationNotice feature="analytics" />
       <div className="metric-grid">
         {[
           ['reach', 'Reported reach'],
@@ -1243,7 +1277,11 @@ export function AnalyticsView() {
                 'shares',
                 'saves',
                 'clicks',
-              ].map((m) => ({ value: m, label: m }))}
+                'watchTime',
+              ].map((m) => ({
+                value: m,
+                label: m === 'watchTime' ? 'Watch time (seconds)' : m,
+              }))}
             />
           </div>
           {chart.some((c) => c.value !== null) ? (
@@ -1348,7 +1386,20 @@ export function AnalyticsView() {
                   </TableCell>
                   <TableCell>
                     <details>
-                      <summary>Metric definitions</summary>
+                      <summary>Post observations and definitions</summary>
+                      <p>Post: {o.payload.postId}</p>
+                      {Object.entries(o.payload.metrics).map(([key, value]) => (
+                        <p key={key}>
+                          {key}:{' '}
+                          {value === null
+                            ? 'Unavailable'
+                            : value.toLocaleString()}
+                        </p>
+                      ))}
+                      <p className="small muted">
+                        Watch percentages are reported per post; they are not
+                        summed across videos.
+                      </p>
                       {Object.entries(o.payload.definitions).map(([k, v]) => (
                         <p key={k}>
                           {k}: {v}
@@ -1575,13 +1626,17 @@ export function InsightsView() {
         </div>
         <ReportControls report={reportState} />
         <div className="tabs-row">
-          <button className="secondary-btn" onClick={() => setImportOpen(true)}>
+          <button
+            className="secondary-btn"
+            disabled={w.localMode}
+            onClick={() => setImportOpen(true)}
+          >
             <Upload size={15} /> Import data
           </button>
           <button
             className="icon-btn"
             aria-label="Refresh customer insights"
-            disabled={w.busy || !w.brandId}
+            disabled={w.localMode || w.busy || !w.brandId}
             onClick={() =>
               void w
                 .mutate('refresh-insights', { brandId: w.brandId })
@@ -1595,6 +1650,7 @@ export function InsightsView() {
           </button>
         </div>
       </div>
+      <ActivationNotice feature="insights" />
       <div className="tabs-row">
         <Dropdown
           value={currency}
@@ -1724,7 +1780,7 @@ export function InsightsView() {
           </div>
           <button
             className="secondary-btn spaced"
-            disabled={!w.brandId || w.busy}
+            disabled={w.localMode || !w.brandId || w.busy}
             onClick={() =>
               void w
                 .mutate<typeof tracking>('tracking', { brandId: w.brandId })
@@ -1763,7 +1819,7 @@ export function InsightsView() {
         </p>
       )}
       <FunnelPanel key={w.brandId} />
-      <CustomerExport key={'export-' + w.brandId} />
+      {!w.localMode && <CustomerExport key={'export-' + w.brandId} />}
       {w.records<{
         status: string;
         channels?: { channel: string; credit: number }[];

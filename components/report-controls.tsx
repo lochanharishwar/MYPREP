@@ -72,6 +72,7 @@ export function ReportControls({
     refresh: () => void;
   };
 }) {
+  const { localMode } = useWorkspace();
   return (
     <div className="panel field">
       <div className="tabs-row">
@@ -93,7 +94,7 @@ export function ReportControls({
         </label>
         <button
           className="secondary-btn"
-          disabled={report.loading}
+          disabled={localMode || report.loading}
           onClick={report.refresh}
         >
           {report.loading ? 'Loading report…' : 'Refresh report'}

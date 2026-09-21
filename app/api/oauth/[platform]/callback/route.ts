@@ -1,6 +1,6 @@
 import { platforms } from '@/lib/contracts';
-import { exchange, identity, type Connection } from '@/lib/server/social';
-import { db, insertEntity, rpc } from '@/lib/server/db';
+import { exchange, identity } from '@/lib/server/social';
+import { db, rpc } from '@/lib/server/db';
 import { decrypt, encrypt } from '@/lib/server/security';
 import { required } from '@/lib/server/env';
 export const dynamic = 'force-dynamic';
@@ -38,11 +38,12 @@ export async function GET(
       await decrypt<string>(row.payload.verifier),
     );
     const who = await identity(p, tokens.access_token);
-    const record = await insertEntity<Connection>(
-      row.workspace_id,
-      row.brand_id,
-      'connection',
-      {
+    await rpc('reconnect_social_account', {
+      p_workspace: row.workspace_id,
+      p_brand: row.brand_id,
+      p_actor: row.payload.userId,
+      p_encrypted: await encrypt(tokens),
+      p_connection: {
         platform: p,
         ...who,
         status: 'connected',
@@ -50,11 +51,7 @@ export async function GET(
           ? new Date(tokens.expires_at).toISOString()
           : undefined,
       },
-    );
-    const { error } = await db()
-      .from('credentials')
-      .insert({ entity_id: record.id, encrypted: await encrypt(tokens) });
-    if (error) throw error;
+    });
     return Response.redirect(
       `${required('APP_ORIGIN')}/?connected=${encodeURIComponent(platform)}`,
     );

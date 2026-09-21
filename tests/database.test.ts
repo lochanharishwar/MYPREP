@@ -53,6 +53,122 @@ beforeEach(async () => {
 });
 afterAll(() => pg.close());
 describe('database gates', () => {
+  it('reports watch seconds without summing per-post percentages', async () => {
+    await record('metrics', {
+      postId: 'post-one',
+      platform: 'youtube',
+      observedAt: '2026-09-01T12:00:00Z',
+      metrics: { watchTime: 120, averageWatchPercentage: 40 },
+    });
+    await record('metrics', {
+      postId: 'post-two',
+      platform: 'youtube',
+      observedAt: '2026-09-01T12:00:00Z',
+      metrics: { watch_seconds: 180, averageWatchPercentage: 80 },
+    });
+    const report = async (metric: string) =>
+      (
+        await pg.query<{
+          data: {
+            totals: Record<string, number>;
+            chart: { value: number | null }[];
+            latest: unknown[];
+          };
+        }>(
+          "select metric_report($1,'2026-09-01','2026-09-02',null,null,$2) data",
+          [brand, metric],
+        )
+      ).rows[0].data;
+    const time = await report('watchTime');
+    expect(time.totals.watchTime).toBe(300);
+    expect(time.chart[0].value).toBe(300);
+    expect(time.totals.averageWatchPercentage).toBeUndefined();
+    const percentages = await report('averageWatchPercentage');
+    expect(percentages.chart[0].value).toBeNull();
+    expect(percentages.latest).toHaveLength(2);
+  });
+  it('preserves a destination ID and replaces its credentials atomically on reconnect', async () => {
+    const payload = {
+      platform: 'youtube',
+      accountId: 'channel-fixture',
+      name: 'Fixture',
+    };
+    const connect = async (secret: string) =>
+      (
+        await pg.query<{ id: string }>(
+          'select reconnect_social_account($1,$2,$3,$4,$5) id',
+          [workspace, brand, owner, JSON.stringify(payload), secret],
+        )
+      ).rows[0].id;
+    const id = await connect('old-ciphertext');
+    await pg.query('select disconnect_connection($1,$2,$3)', [
+      workspace,
+      id,
+      owner,
+    ]);
+    expect(await connect('new-ciphertext')).toBe(id);
+    expect(
+      (await pg.query("select * from entities where kind='connection'")).rows,
+    ).toHaveLength(1);
+    expect(
+      (
+        await pg.query<{ encrypted: string }>(
+          'select encrypted from credentials where entity_id=$1',
+          [id],
+        )
+      ).rows[0].encrypted,
+    ).toBe('new-ciphertext');
+    await expect(
+      pg.query('select reconnect_social_account($1,$2,$3,$4,$5)', [
+        workspace,
+        brand,
+        other,
+        JSON.stringify(payload),
+        'bad',
+      ]),
+    ).rejects.toThrow('Owner required');
+  });
+  it('blocks final dispatch after account disconnection or cross-brand substitution', async () => {
+    const accountId = await record('connection', {
+      platform: 'x',
+      status: 'connected',
+    });
+    await pg.query(
+      'insert into credentials(entity_id,encrypted) values($1,$2)',
+      [accountId, 'fixture'],
+    );
+    const id = await record('schedule', {
+      accountId,
+      platform: 'x',
+      status: 'publishing',
+      revision: 1,
+    });
+    await pg.query('select disconnect_connection($1,$2,$3)', [
+      workspace,
+      accountId,
+      owner,
+    ]);
+    expect(
+      (
+        await pg.query<{ ok: boolean }>(
+          'select claim_provider_dispatch($1,1) ok',
+          [id],
+        )
+      ).rows[0].ok,
+    ).toBe(false);
+    const missing = await record('schedule', {
+      status: 'publishing',
+      revision: 1,
+    });
+    expect(
+      (
+        await pg.query<{ ok: boolean }>(
+          'select claim_provider_dispatch($1,1) ok',
+          [missing],
+        )
+      ).rows[0].ok,
+    ).toBe(false);
+  });
   it('disconnects credentials and account readiness atomically and audits once', async () => {
     const id = await record('connection', {
       platform: 'x',
@@ -381,7 +497,19 @@ describe('database gates', () => {
     ).rejects.toThrow();
   });
   it('prevents audit rewrites and preserves dispatch evidence', async () => {
-    const id = await record('schedule', { status: 'publishing', revision: 1 });
+    const accountId = await record('connection', {
+      platform: 'x',
+      status: 'connected',
+    });
+    await pg.query(
+      'insert into credentials(entity_id,encrypted) values($1,$2)',
+      [accountId, 'fixture'],
+    );
+    const id = await record('schedule', {
+      status: 'publishing',
+      revision: 1,
+      accountId,
+    });
     await pg.query('select claim_provider_dispatch($1,1)', [id]);
     await pg.query(
       'update entities set payload=\'{"status":"published"}\' where id=$1',
@@ -639,7 +767,19 @@ describe('database gates', () => {
     ).toHaveLength(1);
   });
   it('allows a single provider dispatch even after an interrupted worker', async () => {
-    const id = await record('schedule', { status: 'publishing', revision: 2 });
+    const accountId = await record('connection', {
+      platform: 'x',
+      status: 'connected',
+    });
+    await pg.query(
+      'insert into credentials(entity_id,encrypted) values($1,$2)',
+      [accountId, 'fixture'],
+    );
+    const id = await record('schedule', {
+      status: 'publishing',
+      revision: 2,
+      accountId,
+    });
     expect(
       (
         await pg.query<{ ok: boolean }>(

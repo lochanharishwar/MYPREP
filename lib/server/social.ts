@@ -71,7 +71,7 @@ const endpoints: Record<
     authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
     token: 'https://oauth2.googleapis.com/token',
     scope:
-      'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly',
+      'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly',
   },
   x: {
     authorize: 'https://x.com/i/oauth2/authorize',
@@ -702,6 +702,7 @@ export async function metrics(
   c: Entity<Connection>,
   token: string,
   id: string,
+  publishedAt?: string,
 ) {
   const p = c.payload.platform,
     h = headers(p, token);
@@ -714,7 +715,8 @@ export async function metrics(
     shares: null,
     saves: null,
     clicks: null,
-    watch_seconds: null,
+    watchTime: null,
+    averageWatchPercentage: null,
   };
   let comments: { id: string; text: string; url: string }[] = [];
   if (p === 'youtube') {
@@ -735,6 +737,37 @@ export async function metrics(
     result.likes = s?.likeCount === undefined ? null : Number(s.likeCount);
     result.comments =
       s?.commentCount === undefined ? null : Number(s.commentCount);
+    if (publishedAt && Number.isFinite(Date.parse(publishedAt))) {
+      try {
+        const query = new URLSearchParams({
+          ids: 'channel==MINE',
+          startDate: publishedAt.slice(0, 10),
+          endDate: new Date().toISOString().slice(0, 10),
+          metrics: 'estimatedMinutesWatched,averageViewPercentage,shares',
+          filters: `video==${id}`,
+        });
+        const analytics = await providerJSON<{
+          columnHeaders?: { name: string }[];
+          rows?: (string | number)[][];
+        }>(`https://youtubeanalytics.googleapis.com/v2/reports?${query}`, {
+          headers: h,
+        });
+        const values = analytics.rows?.[0];
+        if (values)
+          for (const [i, column] of (analytics.columnHeaders ?? []).entries()) {
+            const n = Number(values[i]);
+            if (values[i] === undefined || !Number.isFinite(n)) continue;
+            if (column.name === 'estimatedMinutesWatched')
+              result.watchTime = n * 60;
+            if (column.name === 'averageViewPercentage')
+              result.averageWatchPercentage = n;
+            if (column.name === 'shares') result.shares = n;
+          }
+      } catch (error) {
+        if ((error as { providerStatus?: number }).providerStatus !== 403)
+          throw error;
+      }
+    }
     try {
       const r = await providerJSON<{
         items: {
@@ -845,7 +878,9 @@ export async function metrics(
       impressions: 'Platform-reported impressions.',
       views: 'Platform-defined views; thresholds differ.',
       likes: 'Platform-reported likes; Reddit uses net_score instead.',
-      watch_seconds: 'Watch time, only when supplied by the platform.',
+      watchTime: 'Watch time in seconds, only when supplied by the platform.',
+      averageWatchPercentage:
+        'YouTube Analytics average percentage of video watched; may exceed 100% for repeat viewing.',
     },
   };
 }

@@ -11,28 +11,45 @@ export function ContentRevision({
     [caption, setCaption] = useState(content.payload.caption);
   return (
     <details className="spaced">
-      <summary>Edit caption and request review</summary>
+      <summary>
+        {w.localMode
+          ? 'Give direction for a new version'
+          : 'Edit caption and request review'}
+      </summary>
       <form
         className="field spaced"
         onSubmit={(e) => {
           e.preventDefault();
           void w
-            .mutate('decision', { id: content.id, decision: 'edit', caption })
-            .then(() =>
-              w.setNotice(
-                'Revision queued for review. It will appear in the gallery only if it qualifies.',
-              ),
+            .mutate('decision', {
+              id: content.id,
+              decision: w.localMode ? 'redo' : 'edit',
+              caption,
+              feedback: w.localMode ? caption : undefined,
+            })
+            .then(
+              () =>
+                !w.localMode &&
+                w.setNotice(
+                  'Revision queued for review. It will appear in the gallery only if it qualifies.',
+                ),
             )
             .catch(() => {});
         }}
       >
         <p className="muted small">
-          This creates a separate version, reuses the existing media and charges
-          review/preparation against the same campaign limit. Approvals of the
-          original version do not approve the revision.
+          {w.localMode ? (
+            'This generates new media and copy using your direction, then reviews them against the same campaign limit.'
+          ) : (
+            <>
+              This creates a separate version, reuses the existing media and
+              charges review/preparation against the same campaign limit.
+              Approvals of the original version do not approve the revision.
+            </>
+          )}
         </p>
         <label>
-          Revised caption
+          {w.localMode ? 'Revision direction' : 'Revised caption'}
           <textarea
             required
             value={caption}
@@ -47,7 +64,7 @@ export function ContentRevision({
           className="secondary-btn"
           disabled={w.busy || caption === content.payload.caption}
         >
-          Submit revision for review
+          {w.localMode ? 'Generate new version' : 'Submit revision for review'}
         </button>
       </form>
     </details>

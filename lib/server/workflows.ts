@@ -550,15 +550,7 @@ export const generationWorkflow = inngest.createFunction(
                     throw new Error('Asset scope mismatch');
                   references.push(await assetUrl(a.payload.assetPath, 300));
                 }
-                return generateImage(
-                  ctx,
-                  script.prompt,
-                  references.length
-                    ? references
-                    : dna.payload.logo
-                      ? [dna.payload.logo]
-                      : [],
-                );
+                return generateImage(ctx, script.prompt, references);
               });
             if (format === 'video') {
               const operation = await step.run(key + '-video-start', () =>
@@ -939,6 +931,7 @@ export const feedbackWorkflow = inngest.createFunction(
           conn,
           token.access_token,
           post.payload.providerId!,
+          post.payload.publishedAt,
         );
         const observedAt = new Date().toISOString();
         await insertEntity(ctx.workspaceId, ctx.brandId, 'metrics', {

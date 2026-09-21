@@ -43,6 +43,7 @@ next-env.d.ts
 __pycache__/
 *.pyc
 /services/processor/.venv/
+/supabase/.temp/
 
 # Logs
 npm-debug.log*

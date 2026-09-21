@@ -13,12 +13,21 @@ export function required(name: string) {
 }
 export const serviceStatus = () => [
   {
-    name: 'Workspace & sign-in',
+    name: 'Basic website scan',
+    ready:
+      process.env.NODE_ENV !== 'production' ||
+      env('BROWSER_WORKSPACE_MODE') === 'sites',
+    detail:
+      'Public HTML, linked pages and CSS; no API key needed. Coverage is limited and JavaScript is not executed.',
+  },
+  {
+    name: 'Server workspace',
     ready:
       !!env('SUPABASE_URL') &&
       !!env('SUPABASE_ANON_KEY') &&
       !!env('SUPABASE_SERVICE_ROLE_KEY'),
-    detail: 'Supabase project, migrations, email and Google sign-in',
+    detail:
+      'Supabase database and private storage for teams, social accounts and durable workflows. Local drafting needs no app account.',
   },
   {
     name: 'Website discovery',
@@ -28,7 +37,9 @@ export const serviceStatus = () => [
   {
     name: 'Generation & review',
     ready: !!env('GEMINI_API_KEY'),
-    detail: 'Gemini text, image, video, and vision APIs',
+    detail: env('GEMINI_API_KEY')
+      ? 'Model key configured; actual model access and quota are checked on each request.'
+      : 'Missing GEMINI_API_KEY on the server. Use your Google AI Studio key; no image generation is available until configured.',
   },
   {
     name: 'Background jobs',

@@ -77,11 +77,15 @@ export function WorkspaceSettings() {
             <TabsList className="w-full h-auto flex-wrap">
               <TabsTrigger value="account">Workspace</TabsTrigger>
               <TabsTrigger value="connections">Connections</TabsTrigger>
-              <TabsTrigger value="team">Team</TabsTrigger>
-              <TabsTrigger value="governance">Governance</TabsTrigger>
+              <TabsTrigger value="team" disabled={w.localMode}>
+                Team
+              </TabsTrigger>
+              <TabsTrigger value="governance" disabled={w.localMode}>
+                Governance
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="account">
-              <IdentityControls />
+              {!w.localMode && <IdentityControls />}
               {(w.state.workspaces?.length ?? 0) > 0 && (
                 <label className="field spaced">
                   Active workspace
@@ -119,15 +123,53 @@ export function WorkspaceSettings() {
                       publishing, team access, and customer data require the
                       secure backend.
                     </div>
-                    <button
-                      className="secondary-btn"
-                      onClick={() => {
-                        localStorage.removeItem('bc_local_workspace_v1');
-                        location.reload();
+                    <form
+                      className="field"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void run(
+                          () =>
+                            w.mutate('settings', {
+                              monthlyLimit: Number(limit),
+                            }),
+                          'Monthly limit saved.',
+                        );
                       }}
                     >
-                      Reset local workspace
-                    </button>
+                      <label>
+                        Monthly automation limit (USD)
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          required
+                          value={limit}
+                          placeholder={String(
+                            w.state.workspace?.monthly_limit ?? 0,
+                          )}
+                          onChange={(e) => setLimit(e.target.value)}
+                        />
+                      </label>
+                      <p className="small muted">
+                        Browser limits use conservative estimates and apply only
+                        to this saved workspace. Provider subscriptions and
+                        usage are billed separately. Keep this tab open during
+                        generation.
+                      </p>
+                      <button className="primary-btn">Save limit</button>
+                    </form>
+                    <ConfirmAction
+                      label="Reset local workspace"
+                      className="secondary-btn"
+                      title="Delete this browser workspace?"
+                      description="This deletes saved brands, findings and drafts from this browser. Download any drafts you want to keep first."
+                      confirmLabel="Delete local workspace"
+                      onConfirm={async () => {
+                        localStorage.removeItem('bc_local_workspace_v1');
+                        indexedDB.deleteDatabase('brandcurrent-media');
+                        location.reload();
+                      }}
+                    />
                   </>
                 ) : !w.session ? (
                   <>
@@ -320,10 +362,20 @@ export function WorkspaceSettings() {
               </div>
             </TabsContent>
             <TabsContent value="governance">
-              <GovernancePanel />
+              {!w.localMode && <GovernancePanel />}
             </TabsContent>
             <TabsContent value="connections">
               <div className="spaced">
+                {w.localMode && (
+                  <p className="notice">
+                    Website scans work without a key. For local image creation,
+                    configure GEMINI_API_KEY, COST_TEXT and COST_IMAGE on the
+                    server, then restart it. Social sign-in and unattended
+                    posting also need Supabase, Inngest and your platform OAuth
+                    apps. This browser workspace cannot run jobs after it
+                    closes.
+                  </p>
+                )}
                 <p className="muted small">
                   A configured service has credentials available. A connected
                   social account has completed authorization; platform approval
@@ -411,6 +463,7 @@ export function WorkspaceSettings() {
                     <button
                       className="secondary-btn"
                       disabled={
+                        w.localMode ||
                         !w.brandId ||
                         w.state.workspace?.role !== 'owner' ||
                         w.busy

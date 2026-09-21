@@ -4,57 +4,68 @@ import { normalizeUrl } from '../domain';
 export async function validatePublicUrl(raw: string) {
   const url = normalizeUrl(raw);
   const host = new URL(url).hostname;
-
-  if (
-    /^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|198\.(18|19)\.|2[2-5]\d\.)/.test(
-      host,
-    )
-  ) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('Private network addresses cannot be crawled.');
-    }
-  }
-  if (/^(::|fc|fd|fe[89ab])/i.test(host)) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('Private network addresses cannot be crawled.');
-    }
-  }
-
-  try {
-    for (const type of ['A', 'AAAA']) {
-      const r = await fetch(
-        `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=${type}`,
+  const answers = await Promise.all(
+    ['A', 'AAAA'].map(async (type) => {
+      const response = await fetch(
+        'https://cloudflare-dns.com/dns-query?name=' +
+          encodeURIComponent(host) +
+          '&type=' +
+          type,
         {
           headers: { accept: 'application/dns-json' },
-          signal: AbortSignal.timeout(4000),
+          signal: AbortSignal.timeout(8000),
         },
       );
-      if (!r.ok) continue;
-      const j = (await r.json()) as { Answer?: { type: number; data: string }[] };
-      for (const a of j.Answer ?? []) {
-        if (
-          a.type === 1 &&
-          /^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|198\.(18|19)\.|2[2-5]\d\.)/.test(
-            a.data,
-          )
-        ) {
-          if (process.env.NODE_ENV === 'production') {
-            throw new Error('Private network addresses cannot be crawled.');
-          }
-        }
-        if (a.type === 28 && /^(::|fc|fd|fe[89ab])/i.test(a.data)) {
-          if (process.env.NODE_ENV === 'production') {
-            throw new Error('Private network addresses cannot be crawled.');
-          }
-        }
-      }
+      if (!response.ok)
+        throw new Error(
+          'Unable to verify the website address. Retry when DNS is reachable.',
+        );
+      const result = (await response.json()) as {
+        Status?: number;
+        Answer?: { type: number; data: string }[];
+      };
+      if (result.Status && result.Status !== 0)
+        throw new Error(
+          'The website domain could not be resolved. Check its address.',
+        );
+      return result.Answer ?? [];
+    }),
+  );
+  let resolved = false;
+  for (const answer of answers.flat()) {
+    if (answer.type === 1) {
+      resolved = true;
+      const [a, b] = answer.data.split('.').map(Number);
+      if (
+        !Number.isFinite(a) ||
+        a === 0 ||
+        a === 10 ||
+        a === 127 ||
+        a >= 224 ||
+        (a === 169 && b === 254) ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && [0, 168].includes(b)) ||
+        (a === 100 && b >= 64 && b <= 127) ||
+        (a === 198 && [18, 19, 51].includes(b)) ||
+        (a === 203 && b === 0)
+      )
+        throw new Error(
+          'Private or reserved network addresses cannot be crawled.',
+        );
     }
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('Private network addresses')) {
-      throw err;
+    if (answer.type === 28) {
+      resolved = true;
+      if (
+        !/^[23][0-9a-f]{3}:/i.test(answer.data) ||
+        /^2001:(db8|0):/i.test(answer.data)
+      )
+        throw new Error(
+          'Private or reserved network addresses cannot be crawled.',
+        );
     }
-    // If DoH lookup fails due to offline/network disconnect or timeout, allow URL to proceed
   }
+  if (!resolved)
+    throw new Error('The website has no public address. Check its domain.');
   return url;
 }
 const enc = new TextEncoder();
