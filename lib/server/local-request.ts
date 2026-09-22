@@ -3,14 +3,27 @@ import { boundedBytes } from './http';
 import { env } from './env';
 
 // These endpoints never bypass the authenticated, durable workspace API.
-export function assertLocalRequest(request: Request) {
+export function assertLocalRequest(
+  request: Request,
+  publicWebsiteRead = false,
+) {
   const hosted = process.env.NODE_ENV === 'production';
+  const url = new URL(request.url);
+  // Sites enforces its access policy before dispatch, including authorized tool
+  // requests that have no visitor identity. Only the keyless public-web reader
+  // may use that access: it reads no workspace records and dispatches no paid job.
+  const dispatchedRead =
+    publicWebsiteRead &&
+    !!env('APP_ORIGIN') &&
+    url.origin === new URL(env('APP_ORIGIN')).origin &&
+    /^site---[a-f0-9]{32}$/.test(request.headers.get('x-dispatched-app') ?? '');
   if (
     hosted &&
     (env('BROWSER_WORKSPACE_MODE') !== 'sites' ||
       !(
         request.headers.get('oai-authenticated-user-id')?.trim() ||
-        request.headers.get('oai-authenticated-user-email')?.trim()
+        request.headers.get('oai-authenticated-user-email')?.trim() ||
+        dispatchedRead
       ))
   )
     throw Object.assign(
@@ -19,7 +32,6 @@ export function assertLocalRequest(request: Request) {
       ),
       { status: 403 },
     );
-  const url = new URL(request.url);
   if (!hosted && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
     throw Object.assign(
       new Error('Local processing requires a loopback server.'),
@@ -43,8 +55,8 @@ export function assertLocalRequest(request: Request) {
   if (!request.headers.get('content-type')?.includes('application/json'))
     throw Object.assign(new Error('Send a JSON request.'), { status: 415 });
 }
-export async function localBody(request: Request) {
-  assertLocalRequest(request);
+export async function localBody(request: Request, publicWebsiteRead = false) {
+  assertLocalRequest(request, publicWebsiteRead);
   const text = new TextDecoder().decode(await boundedBytes(request, 500000));
   try {
     return JSON.parse(text);

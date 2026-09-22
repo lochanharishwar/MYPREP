@@ -144,6 +144,35 @@ describe('Accurate website observations and scan recovery', () => {
       ),
     ).toThrow('Cross-site');
   });
+  it('allows dispatcher-authorized public scans without opening paid operations or other origins', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('BROWSER_WORKSPACE_MODE', 'sites');
+    vi.stubEnv('APP_ORIGIN', 'https://brand.example');
+    const headers = {
+      'content-type': 'application/json',
+      'x-dispatched-app': 'site---aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      origin: 'https://brand.example',
+    };
+    const scan = new Request('https://brand.example/api/local/scan', {
+      headers,
+    });
+    expect(() => assertLocalRequest(scan, true)).not.toThrow();
+    expect(() => assertLocalRequest(scan)).toThrow('private Sites');
+    expect(() =>
+      assertLocalRequest(
+        new Request('https://other.example/api/local/scan', { headers }),
+        true,
+      ),
+    ).toThrow('private Sites');
+    expect(() =>
+      assertLocalRequest(
+        new Request('https://brand.example/api/local/scan', {
+          headers: { ...headers, origin: 'https://evil.example' },
+        }),
+        true,
+      ),
+    ).toThrow('Cross-site');
+  });
   it('streams source-backed findings before completing the scan', async () => {
     vi.stubGlobal(
       'fetch',

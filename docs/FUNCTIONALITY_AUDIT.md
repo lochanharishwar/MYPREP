@@ -14,7 +14,7 @@ The app can run locally without a BrandCurrent account. This assessment distingu
 
 ## Verification
 
-- 110 Vitest checks passed, including real-data contracts with mocked HTTP transport, private redirect denial, no-key/no-fabrication behavior, reference/finished-media review wiring, persistence isolation, reconnect and dispatch gates, and YouTube metrics. Watch-time reporting also checks historical field compatibility and prevents summing percentages across videos.
+- 111 Vitest checks passed, including real-data contracts with mocked HTTP transport, private redirect denial, no-key/no-fabrication behavior, reference/finished-media review wiring, persistence isolation, reconnect and dispatch gates, and YouTube metrics. Watch-time reporting also checks historical field compatibility and prevents summing percentages across videos.
 - TypeScript and lint checks passed. Production build passed with nonfatal Vinext/Vite warnings.
 - Browser inspected Dashboard, Brand DNA, Content studio, Scheduled posts, Analytics and Customer insights on localhost. No localhost console errors were observed during this flow. Verified login-free settings and retained website results on navigation.
 - No publishing test sent a social post. No tests establish that production integrations are active.
@@ -34,3 +34,5 @@ The remaining activation steps cannot be replaced with scraped public API keys o
 The production scan endpoint returned HTTP 403 because the current Sites dispatcher supplied authenticated email without the assumed user-ID header. The browser-workspace guard now accepts either trusted dispatch identity and checks the configured application origin. It still rejects missing identity and cross-site calls. Regression tests cover this exact request shape, script/demo identity contamination, structured data, large response prefixes, sitemap recovery and interrupted streams. Content studio groups the brief and delivery settings, with optional creative fields collapsed and format/platform selection preserved.
 
 Reader integration follows https://github.com/jina-ai/reader and was checked against its live JSON endpoint. Browser-rendered HTML requires a key and is not advertised as available in the keyless path. A failed reader returns a coverage limitation, never synthesized facts.
+
+22 September follow-up: Sites bearer-authorized verification requests carry no visitor identity headers. The keyless public-website scan now also accepts trusted Sites dispatch at the exact configured app origin, relying on the existing private Sites audience gate. This exception does not apply to paid generation, server records or account actions. Cross-site calls remain rejected. Regression tests cover the identity-free dispatch path and its scope.

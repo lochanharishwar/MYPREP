@@ -6,7 +6,7 @@ export async function POST(request: Request) {
   try {
     const input = z
       .object({ url: z.string().min(1).max(2000) })
-      .parse(await localBody(request));
+      .parse(await localBody(request, true));
     if (request.headers.get('accept')?.includes('application/x-ndjson')) {
       const encoder = new TextEncoder();
       let closed = false;
