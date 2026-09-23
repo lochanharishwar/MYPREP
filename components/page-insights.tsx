@@ -30,7 +30,12 @@ const publicUrl = (value?: string) => {
 };
 
 function ResultsList({ query }: { query: string }) {
-  const { read, brandId } = useWorkspace();
+  const { read, brandId, records, localMode } = useWorkspace();
+  const pageRevision = localMode
+    ? records<PageInsight>('page')
+        .map((r) => `${r.id}:${r.updated_at}`)
+        .join('|')
+    : '';
   const [result, setResult] = useState<Results | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -93,7 +98,7 @@ function ResultsList({ query }: { query: string }) {
       clearTimeout(timer);
       request.current?.abort();
     };
-  }, [load]);
+  }, [load, pageRevision]);
   return (
     <div aria-busy={loading}>
       <output className="row muted small spaced">

@@ -96,7 +96,8 @@ export function Empty({
 }
 function Dashboard() {
   const w = useWorkspace();
-  const [url, setUrl] = useState('');
+  const [websiteDraft, setWebsiteDraft] = useState({ brandId: '', url: '' });
+  const url = websiteDraft.brandId === w.brandId ? websiteDraft.url : '';
   const scans = w.records<{
     status: string;
     discovered: number;
@@ -150,8 +151,8 @@ function Dashboard() {
           </span>
           <h2>Good marketing starts with understanding.</h2>
           <p>
-            Share your website. Your agents will uncover the identity, voice,
-            and details that make your brand yours.
+            Read your public pages, inspect the sources, and get practical brand
+            findings and campaign experiments.
           </p>
           <form
             className="scan-form"
@@ -163,11 +164,16 @@ function Dashboard() {
             <Globe2 size={20} className="muted" />
             <input
               aria-label="Brand website URL"
-              type="url"
+              type="text"
+              inputMode="url"
+              autoCapitalize="none"
+              spellCheck={false}
               required={!w.brand}
               placeholder={w.brand?.website ?? 'https://yourbrand.com'}
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) =>
+                setWebsiteDraft({ brandId: w.brandId, url: e.target.value })
+              }
             />
             <LiquidButton
               type="submit"
@@ -176,7 +182,7 @@ function Dashboard() {
               disabled={w.busy}
               className="shrink-0"
             >
-              {w.busy ? 'Starting…' : 'Discover my brand'}{' '}
+              {w.busy ? 'Analyzing…' : 'Discover my brand'}{' '}
               <ArrowRight size={16} />
             </LiquidButton>
           </form>

@@ -8,6 +8,8 @@ import {
 import { assertLocalRequest } from '@/lib/server/local-request';
 import { scanWithProgress } from '@/lib/scan-stream';
 import { POST } from '@/app/api/local/scan/route';
+import { publicFetch } from '@/lib/server/public-fetch';
+import { normalizeUrl } from '@/lib/domain';
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -22,6 +24,28 @@ const dns = (url: string) =>
       : [{ type: 1, data: '93.184.216.34' }],
   });
 describe('Accurate website observations and scan recovery', () => {
+  it('preserves meaningful path slashes when following website redirects', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('dns-query')) return dns(url);
+        if (url === 'https://example.com/products')
+          return new Response(null, {
+            status: 301,
+            headers: { location: '/products/' },
+          });
+        if (url === 'https://example.com/products/')
+          return html('<title>Actual products</title>');
+        throw new Error('Unexpected URL ' + url);
+      }),
+    );
+    expect(normalizeUrl('https://example.com/products/')).toBe(
+      'https://example.com/products/',
+    );
+    const result = await publicFetch('https://example.com/products');
+    expect(result.url).toBe('https://example.com/products/');
+    expect(result.response.status).toBe(200);
+  });
   it('does not promote animated word fragments or demo fonts to brand identity', () => {
     const page = parsePage(
       '<p>Build better <span class="lw-tagline-type">interactions</span></p>',

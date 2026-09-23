@@ -70,7 +70,9 @@ export function normalizeUrl(raw: string) {
       u.searchParams.delete(key);
   u.searchParams.sort();
   u.pathname = u.pathname.replace(/\/{2,}/g, '/');
-  return u.toString().replace(/\/$/, '');
+  // A path's trailing slash is meaningful to many origins (and to redirects).
+  // Only the empty root path has an equivalent slash-free representation.
+  return u.pathname === '/' && !u.search ? u.origin : u.toString();
 }
 export function utcFromLocal(local: string, timeZone: string) {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local))

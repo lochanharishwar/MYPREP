@@ -1169,6 +1169,32 @@ fieldset {
 .brand-logo {
   flex-shrink: 0;
 }
+.brand-strategy-grid > section {
+  scroll-margin-top: 110px;
+}
+.brand-finding {
+  padding: 18px;
+}
+.brand-finding .section-title {
+  align-items: flex-start;
+  gap: 12px;
+}
+.brand-finding h3 {
+  font-size: 1rem;
+  line-height: 1.4;
+}
+.brand-finding p {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.brand-finding .pill {
+  white-space: nowrap;
+  font-size: 0.75rem;
+}
+.experiment-action {
+  padding-left: 12px;
+  border-left: 2px solid #64cddd;
+}
 @media (max-width: 700px) {
   .insight-grid {
     grid-template-columns: 1fr;
@@ -1179,5 +1205,14 @@ fieldset {
   .top-actions [data-slot='select-trigger'] {
     min-width: 90px;
     max-width: 130px;
+  }
+  .top-actions .avatar {
+    display: none;
+  }
+  .topbar {
+    gap: 10px;
+  }
+  .top-actions {
+    gap: 8px;
   }
 }

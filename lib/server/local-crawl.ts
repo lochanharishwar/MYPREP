@@ -4,25 +4,53 @@ import { boundedBytes } from './http';
 import { publicFetch } from './public-fetch';
 import { validatePublicUrl } from './security';
 import { parsePage, plainText, safeLink } from './page-observations';
+import { analyzeWebsiteDNA } from '../brand-analysis';
 export { parsePage, plainText } from './page-observations';
 
 export function observedStyles(css: string, url: string) {
   const colors: BrandDNA['colors'] = [];
   const fonts = new Set<string>();
-  for (const rule of css.replace(/\/\*[\s\S]*?\*\//g, '').split('}')) {
-    const [selector, declarations] = rule.includes('{')
-      ? rule.split(/\{([\s\S]*)/)
-      : ['inline style', rule];
+  const rules = [
+    ...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g),
+  ];
+  const globalSelector = (selector: string) =>
+    selector
+      .split(',')
+      .some((s) => /^(?:html|body|:root)(?:[.#:[][^\s>+~]*)?$/.test(s.trim()));
+  const variables = new Map<string, string>();
+  for (const [, selector, declarations] of rules)
+    if (globalSelector(selector)) {
+      for (const match of declarations.matchAll(
+        /(?:^|;)\s*(--[\w-]+)\s*:\s*([^;]+)/g,
+      ))
+        variables.set(match[1], match[2].trim());
+    }
+  const resolve = (value: string, depth = 0): string =>
+    depth > 5
+      ? value
+      : value.replace(
+          /var\(\s*(--[\w-]+)\s*(?:,\s*([^()]+))?\)/g,
+          (original, key, fallback) =>
+            variables.has(key)
+              ? resolve(variables.get(key)!, depth + 1)
+              : (fallback ?? original),
+        );
+  for (const [, selector, declarations] of rules) {
     for (const match of (declarations ?? '').matchAll(
       /(?:^|;)\s*([\w-]+)\s*:\s*([^;]+)/g,
     )) {
       if (
         match[1] === 'font-family' &&
-        /(?:^|[\s,])(?:html|body|:root)(?:$|[\s,.#:[>])/i.test(selector) &&
-        !/var\(/i.test(match[2])
+        globalSelector(selector) &&
+        !/var\(/i.test(resolve(match[2]))
       )
-        fonts.add(match[2].trim());
-      for (const c of match[2].matchAll(
+        fonts.add(
+          resolve(match[2])
+            .replace(/\s*!important\s*$/i, '')
+            .trim(),
+        );
+      const colorValue = match[2].replace(/url\([^)]*\)/gi, '');
+      for (const c of colorValue.matchAll(
         /#[\da-f]{3,8}\b|(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\(/gi,
       )) {
         if (c[0].startsWith('#') && ![4, 5, 7, 9].includes(c[0].length))
@@ -31,13 +59,13 @@ export function observedStyles(css: string, url: string) {
         if (value.endsWith('(')) {
           let depth = 1,
             end = c.index + value.length;
-          while (end < match[2].length && depth) {
-            if (match[2][end] === '(') depth++;
-            if (match[2][end] === ')') depth--;
+          while (end < colorValue.length && depth) {
+            if (colorValue[end] === '(') depth++;
+            if (colorValue[end] === ')') depth--;
             end++;
           }
           if (depth) continue;
-          value = match[2].slice(c.index, end);
+          value = colorValue.slice(c.index, end);
         }
         // Unresolved var() expressions must not resolve against this app's CSS.
         if (/var\(/i.test(value)) continue;
@@ -206,6 +234,7 @@ export async function crawlWebsite(
   const pages: Observation[] = [],
     styles: ReturnType<typeof observedStyles>[] = [];
   const cssSeen = new Set<string>();
+  let readerAttempts = 0;
   const sameSite = (url: string) =>
     new URL(url).hostname.replace(/^www\./, '') ===
     new URL(base).hostname.replace(/^www\./, '');
@@ -245,11 +274,16 @@ export async function crawlWebsite(
         directError = message(e);
       }
       if (
-        (!direct || !usable(direct.page)) &&
-        isRoot &&
+        (!direct ||
+          !usable(direct.page) ||
+          (!direct.page.paragraphs.length &&
+            direct.page.headings.length < 2)) &&
+        (isRoot || pages.length < 2) &&
+        readerAttempts < 2 &&
         Date.now() < deadline - 18000
       ) {
         try {
+          readerAttempts++;
           const recovered = await readerFallback(url);
           // Keep direct metadata/assets when the reader supplies missing visible copy.
           if (direct) {
@@ -269,6 +303,9 @@ export async function crawlWebsite(
               `${directError || 'No readable page content.'} ${message(e)}`,
             );
           observation = direct;
+          warnings.push(
+            `Only direct HTML was available for ${url}; rendered copy could not be recovered.`,
+          );
         }
       } else if (direct && usable(direct.page)) observation = direct;
       else
@@ -345,16 +382,31 @@ export async function crawlWebsite(
     }
   }
   // Read brand/about/product pages before legal pages and unbounded catalogs.
-  const rank = (url: string) =>
-    /about|story|brand|company/i.test(new URL(url).pathname)
-      ? 0
-      : /product|service|shop/i.test(new URL(url).pathname)
-        ? 1
-        : /privacy|terms|login|cart|account/i.test(new URL(url).pathname)
-          ? 9
-          : 3;
+  const rank = (url: string) => {
+    const path = new URL(url).pathname;
+    if (
+      /\/(?:privacy|terms|login|signup|register|cart|bag|account|checkout|search|goto)(?:[/.-]|$)/i.test(
+        path,
+      )
+    )
+      return 30;
+    if (
+      /\/(?:about(?:us)?|ourstory|story|brand|company|mission|values|purpose|sustainability)(?:[/.-]|$)/i.test(
+        path,
+      )
+    )
+      return 0;
+    if (
+      /\/(?:products?|services?|features?|solutions?|pricing)(?:[/.-]|$)/i.test(
+        path,
+      )
+    )
+      return 1;
+    if (/\/(?:blog|news|changelog|press)(?:\/|$)/i.test(path)) return 8;
+    return 3 + path.split('/').filter(Boolean).length;
+  };
   let attempts = 1;
-  while (attempts < 6 && Date.now() < deadline - 13000) {
+  while (attempts < 10 && pages.length < 6 && Date.now() < deadline - 13000) {
     const next = [...discovered]
       .filter((u) => !visited.has(u))
       .sort((a, b) => rank(a) - rank(b))[0];
@@ -398,26 +450,45 @@ function assemble(
     });
     return id;
   };
-  const first = pages[0];
+  const identityPages = Object.fromEntries(
+    (['name', 'tagline', 'logo'] as const).map((key) => [
+      key,
+      pages.find((p) => !!p.page[key]),
+    ]),
+  );
   const identityEvidence: Record<string, string[]> = {};
   for (const key of ['name', 'tagline', 'logo'] as const) {
-    if (first.page[key])
+    const observation = identityPages[key];
+    if (observation?.page[key])
       identityEvidence[key] = [
         cite(
-          first,
-          first.page[key],
-          first.page.identity[key],
-          first.page.identity[key].includes('meta') ||
-            first.page.identity[key].includes('script'),
+          observation,
+          observation.page[key]!,
+          observation.page.identity[key],
+          observation.page.identity[key].includes('meta') ||
+            observation.page.identity[key].includes('script'),
         ),
       ];
   }
   const overview: Finding[] = [];
   const seenText = new Set<string>();
   const pageResults = pages.map((p) => {
-    const snippets = p.page.description
-      ? [{ text: p.page.description, selector: 'description metadata' }]
-      : p.page.paragraphs.slice(0, 2);
+    const snippets = [
+      ...(p.page.description &&
+      (p.page.description.length >= 40 || !p.page.paragraphs.length)
+        ? [{ text: p.page.description, selector: 'description metadata' }]
+        : []),
+      ...p.page.paragraphs.slice(0, 3),
+    ]
+      .filter(
+        (s, i, all) => all.findIndex((other) => other.text === s.text) === i,
+      )
+      .slice(0, 3);
+    if (!snippets.length && p.page.headings.length)
+      snippets.push({
+        text: p.page.headings.join(' · ').slice(0, 900),
+        selector: 'h1, h2, h3',
+      });
     const findings: Finding[] = snippets.map((s) => ({
       text: s.text,
       type: 'fact',
@@ -453,6 +524,17 @@ function assemble(
         canonical: p.page.canonical,
       },
       evidence: evidence.filter((e) => e.url === p.page.url),
+      observation: {
+        observedAt: now,
+        url: p.page.url,
+        title: p.page.title,
+        description: p.page.description,
+        headings: p.page.headings,
+        copy: p.page.paragraphs,
+        links: p.page.linkDetails,
+        method: p.method,
+        truncated: p.truncated,
+      },
     };
   });
   const colors = styles.flatMap((s) => s.colors).slice(0, 5000);
@@ -479,9 +561,9 @@ function assemble(
   const dna: Omit<BrandDNA, 'brandId'> = {
     schemaVersion: 1,
     version: Date.now(),
-    name: first.page.name,
-    tagline: first.page.tagline,
-    logo: first.page.logo,
+    name: identityPages.name?.page.name ?? null,
+    tagline: identityPages.tagline?.page.tagline ?? null,
+    logo: identityPages.logo?.page.logo ?? null,
     identityEvidence,
     overview,
     values: [],
@@ -500,6 +582,10 @@ function assemble(
     coverage,
     createdAt: now,
   };
+  const analyzed = analyzeWebsiteDNA(
+    dna,
+    pageResults.map((p) => p.observation),
+  );
   return {
     scan: {
       ...coverage,
@@ -510,10 +596,10 @@ function assemble(
       agent: 2,
       warnings: [...new Set(warnings)],
       coverageNote:
-        'Bounded public-page scan. CSS declarations are observed, not computed; unverified brand traits are left empty.',
+        'Up to six readable pages per scan. CSS declarations are observed, not computed. Findings cite retrieved pages; strategic recommendations are hypotheses to test.',
       error: null,
     },
-    dna,
+    dna: analyzed,
     pages: pageResults,
   };
 }

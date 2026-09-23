@@ -42,6 +42,9 @@ export interface Finding {
   text: string;
   type: 'fact' | 'interpretation' | 'research' | 'correction';
   evidenceIds: string[];
+  title?: string;
+  hypothesis?: string;
+  recommendation?: string;
 }
 export interface BrandDNA {
   governance?: import('./brand-policy').BrandPolicy;
@@ -52,6 +55,12 @@ export interface BrandDNA {
   tagline: string | null;
   logo: string | null;
   identityEvidence?: Partial<Record<'name' | 'tagline' | 'logo', string[]>>;
+  analysis?: {
+    version: 1;
+    method: 'website-evidence';
+    limitations: string[];
+    missing: Record<string, string>;
+  };
   overview: Finding[];
   values: Finding[];
   aesthetics: Finding[];

@@ -30,6 +30,11 @@ import {
 } from '@/lib/local-state';
 import { storeLocalMedia, deleteLocalMedia } from '@/lib/local-media';
 import { scanWithProgress } from '@/lib/scan-stream';
+import {
+  analyzeSavedPages,
+  retainBrandCorrections,
+  jobsNeedResourceRefresh,
+} from '@/lib/brand-report';
 const empty: WorkspaceState = {
   configured: false,
   authenticated: false,
@@ -371,13 +376,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               b.created_at.localeCompare(a.created_at),
             );
           });
-          if (
-            result.rows.some((r) =>
-              ['completed', 'qualified', 'published'].includes(
-                String(r.payload.status),
-              ),
-            )
-          )
+          if (jobsNeedResourceRefresh(result.rows))
             void loadResources(
               resourcesByPath[path] ?? resourcesByPath['/'],
             ).catch(() => {
@@ -415,6 +414,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const setBrandId = (id: string) => {
     epoch.current++;
     setBrand(id);
+    setNotice('');
     if (!localMode) setResources([]);
     setPages({});
     try {
@@ -507,6 +507,22 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       );
       return { saved: true } as T;
     }
+    if (action === 'analyze-dna') {
+      const old = record(request.id, 'dna');
+      const next = create(
+        'dna',
+        old.brand_id,
+        analyzeSavedPages(
+          old.payload as unknown as BrandDNA,
+          snapshot().resources.filter((r) => r.workspace_id === workspace.id),
+        ) as unknown as Record<string, unknown>,
+      );
+      put(next);
+      setNotice(
+        'Analysis updated from your saved page evidence. Open each finding to inspect its sources.',
+      );
+      return next as T;
+    }
     if (action === 'dna') {
       const old = record(request.id, 'dna');
       const correction = request.correction as {
@@ -525,6 +541,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const next = create('dna', old.brand_id, {
         ...dna,
         ...correction,
+        identityEvidence: {
+          ...dna.identityEvidence,
+          name: [id],
+          tagline: [id],
+        },
         version: Date.now(),
         createdAt: new Date().toISOString(),
         governance: undefined,
@@ -558,6 +579,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           : request.brandId;
       const brand = snapshot().state.brands.find((b) => b.id === target);
       if (!brand) throw new Error('Enter a brand website first.');
+      const previousDNA = snapshot().resources.find(
+        (r) => r.kind === 'dna' && r.brand_id === brand.id,
+      )?.payload as unknown as BrandDNA | undefined;
       const scan = create('scan', brand.id, {
         status: 'running',
         url: brand.website,
@@ -568,6 +592,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         agent: 1,
       });
       put(scan);
+      setNotice('Connecting to your website and collecting page evidence…');
       const dnaId = crypto.randomUUID();
       let latestScan = scan;
       let savedPages = 0;
@@ -587,7 +612,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             put(
               {
                 ...create('dna', brand.id, {
-                  ...result.dna,
+                  ...retainBrandCorrections(result.dna, previousDNA),
                   brandId: brand.id,
                 }),
                 id: dnaId,
@@ -608,12 +633,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             );
             if (!complete)
               setNotice(
-                `Read ${savedPages} ${savedPages === 1 ? 'page' : 'pages'}. Findings saved; checking more pages…`,
+                `Read ${savedPages} ${savedPages === 1 ? 'page' : 'pages'} from ${new URL(brand.website).hostname}. Findings saved; checking more pages…`,
               );
           },
         );
         setNotice(
-          `Read ${result.dna.coverage.completed} pages. Your observed Brand DNA is saved; coverage limits are shown below.`,
+          `Read ${result.dna.coverage.completed} pages from ${new URL(brand.website).hostname}. Your observed Brand DNA is saved; coverage limits are shown below.`,
         );
         return { jobId: scan.id } as T;
       } catch (e) {

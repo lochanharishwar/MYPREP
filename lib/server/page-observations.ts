@@ -40,7 +40,7 @@ export function parsePage(html: string, url: string) {
       /* Invalid structured data is not evidence. */
     }
   }
-  const organization = json.find((o) => {
+  const organizations = json.filter((o) => {
     const types = Array.isArray(o['@type']) ? o['@type'] : [o['@type']];
     if (
       !types.some((t) =>
@@ -61,6 +61,9 @@ export function parsePage(html: string, url: string) {
         new URL(url).hostname.replace(/^www\./, '')
     );
   });
+  // Prefer an explicitly first-party entity over an unscoped publisher/partner.
+  const organization =
+    organizations.find((o) => safeLink(string(o.url), url)) ?? organizations[0];
   const meta = Object.fromEntries(
     all('meta').map((e) => [
       (
@@ -103,22 +106,63 @@ export function parsePage(html: string, url: string) {
     .filter(Boolean);
   const main =
     document.querySelector('main, article, [role="main"]') ?? document.body;
-  const paragraphs = [...(main?.querySelectorAll('p') ?? [])]
-    .filter((e) => !e.closest('nav, footer, aside'))
-    .map((e) => ({ text: clean(e.textContent), selector: selector(e) }))
+  const paragraphElements = [
+    ...(main?.querySelectorAll('p, li, dd, blockquote') ?? []),
+  ]
+    .filter((e) => !e.querySelector('p, li, dd, h1, h2, h3, h4, button'))
+    .filter(
+      (e) =>
+        !e.closest(
+          'nav, footer, aside, blockquote, [class*="testimonial" i], [class*="quote" i]',
+        ),
+    )
+    .filter(
+      (e) =>
+        !e.closest(
+          '[role="dialog"], [class*="cookie"], [id*="cookie"], [class*="consent"]',
+        ),
+    );
+  const paragraphs = paragraphElements
+    .map((e) => ({
+      text: clean(e.textContent),
+      selector: selector(e),
+      heading: clean(
+        e.closest('section, article')?.querySelector('h1, h2, h3, h4')
+          ?.textContent,
+      ),
+    }))
     .filter((p) => p.text.length >= 30 && p.text.length <= 1200)
-    .slice(0, 8);
-  const taglineElement = all('[class], [id]').find(
+    .filter(
+      (p, i, all) => all.findIndex((other) => other.text === p.text) === i,
+    )
+    .slice(0, 50);
+  const taglineCandidates = all('[class], [id], [itemprop="slogan"]').filter(
     (e) =>
-      /(?:^|\s)(?:[\w-]+[-_])?(?:tagline|slogan)(?:$|\s)/i.test(
+      (/(?:^|\s)(?:[\w-]+[-_])?(?:tagline|slogan)(?:$|\s)/i.test(
         `${e.className} ${e.id}`,
-      ) &&
+      ) ||
+        e.getAttribute('itemprop') === 'slogan') &&
       !e.closest(
-        'footer, aside, [class*="testimonial"], [class*="review"], [class*="demo"], [class*="preview"]',
+        'footer, aside, [itemtype*="Product"], [class*="testimonial" i], [class*="review" i], [class*="demo" i], [class*="preview" i]',
       ) &&
       clean(e.textContent).length >= 8 &&
       clean(e.textContent).length <= 240,
   );
+  const explicitBrandTagline = taglineCandidates.find(
+    (e) =>
+      /(?:brand|site)[-_](?:tagline|slogan)/i.test(`${e.className} ${e.id}`) ||
+      e.getAttribute('itemprop') === 'slogan',
+  );
+  const onlyTagline =
+    new Set(taglineCandidates.map((e) => clean(e.textContent))).size === 1
+      ? taglineCandidates[0]
+      : undefined;
+  const brandPage = /^\/$|\/(?:about|company|our-story|brand)(?:\/|$)/i.test(
+    new URL(url).pathname,
+  );
+  // A product tagline on a catalog or product page is not the company slogan.
+  const taglineElement =
+    explicitBrandTagline ?? (brandPage ? onlyTagline : undefined);
   const schemaLogo = organization?.logo;
   const structuredLogo =
     typeof schemaLogo === 'string'
@@ -182,6 +226,12 @@ export function parsePage(html: string, url: string) {
     headings,
     h1,
     paragraphs,
+    linkDetails: all('a[href]').flatMap((e) => {
+      const link = safeLink(e.getAttribute('href'), url);
+      return link
+        ? [{ url: link, text: clean(e.textContent).slice(0, 200) }]
+        : [];
+    }),
     text: clean(body).slice(0, 20000),
     identity: {
       name: string(organization?.name)

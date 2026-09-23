@@ -15,7 +15,11 @@ Brands, scans, campaign metadata and limits stay in browser localStorage. Genera
 
 Enter a public website and choose **Discover my brand**. The basic scanner fetches HTML, internal links and accessible CSS on the local server, without a scraping API key. It reads up to six pages per run and saves source-backed results as each page arrives. Oversized pages retain a bounded text prefix. Homepage failures can recover through sitemap indexes and a best-effort public Jina Reader request; only public URLs are sent, without cookies or API keys. Reader availability and rate limits are outside this app. Access failures and limits remain visible as partial coverage. **Scan again** refreshes the bounded scan; it does not promise a full-site crawl. The reader can sometimes recover readable text from JavaScript pages; this is labeled separately and does not establish computed styles or original assets. Guaranteed browser rendering, screenshot analysis and broad external research still require the separate Firecrawl/Browserless server workflow. Scripts, templates, code examples and partial animated words are excluded from identity extraction. Taglines and organization names are left missing unless explicitly observed; palette candidates use declared primary/brand colors rather than all demo colors.
 
-## Image and text generation
+## Brand DNA analysis
+
+Brand DNA also builds a source-linked website analysis without a paid key: strengths, observed issues, explicit values where available, voice observations, gaps to investigate, campaign experiments, and channel recommendations. Hypotheses are labeled, and missing evidence has a specific explanation. This is a limited, rule-based analysis of retrieved pages, not independent market research. Use **Analyze saved evidence** on older reports or **Refresh website & analysis** to collect current pages. User name/tagline corrections survive refreshes. Color declarations are available in an expandable inventory and in the JSON export.
+
+## Image and text generation setup
 
 Copy `.env.example` to `.env` once, preserving any existing configuration. Set your own `GEMINI_API_KEY` and positive conservative `COST_TEXT` / `COST_IMAGE` estimates. Restart the server. Set the monthly limit in **Workspace settings**, and a campaign limit in the content form. Provider billing is separate; browser limits are advisory estimates for this browser, not account-wide billing controls.
 

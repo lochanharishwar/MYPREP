@@ -1,5 +1,6 @@
 'use client';
 import { ActivationNotice } from './activation-notice';
+import { isUnverifiedDNA } from '@/lib/brand-report';
 // Evidence and signed private storage URLs must bypass image optimization.
 /* oxlint-disable next/no-img-element */
 // The installed Recharts 3 release supports Cell for per-series colors.
@@ -79,6 +80,7 @@ import type {
   MetricObservation,
   ScheduledPost,
   Approval,
+  Finding,
 } from '@/lib/contracts';
 import { platforms } from '@/lib/contracts';
 import { Empty } from './marketing-app';
@@ -133,7 +135,55 @@ function Source({ evidence }: { evidence: Evidence }) {
       )}{' '}
       · {evidence.method} · {Math.round(evidence.confidence * 100)}% confidence
       <p className="muted small">{evidence.excerpt.slice(0, 300)}</p>
+      {evidence.selector && (
+        <p className="muted small">Observed at {evidence.selector}</p>
+      )}
     </div>
+  );
+}
+function BrandFinding({ finding, dna }: { finding: Finding; dna: BrandDNA }) {
+  return (
+    <article className="data-card brand-finding">
+      <div className="section-title">
+        {finding.title && <h3>{finding.title}</h3>}
+        <span className="pill">
+          {finding.hypothesis
+            ? 'Hypothesis'
+            : finding.type === 'interpretation'
+              ? 'Interpretation'
+              : finding.type === 'fact'
+                ? 'Website observation'
+                : finding.type}
+        </span>
+      </div>
+      <p>{finding.text}</p>
+      {finding.hypothesis && (
+        <p className="spaced">
+          <strong>Why test this</strong>
+          <br />
+          {finding.hypothesis}
+        </p>
+      )}
+      {finding.recommendation && (
+        <p className="spaced experiment-action">
+          <strong>Next step</strong>
+          <br />
+          {finding.recommendation}
+        </p>
+      )}
+      <details className="spaced small">
+        <summary>
+          Inspect{' '}
+          {finding.evidenceIds.length === 1
+            ? 'source'
+            : `${finding.evidenceIds.length} sources`}
+        </summary>
+        {finding.evidenceIds.map((id) => {
+          const e = dna.evidence.find((e) => e.id === id);
+          return e ? <Source key={id} evidence={e} /> : null;
+        })}
+      </details>
+    </article>
   );
 }
 export function DNACard({ compact = false }: { compact?: boolean }) {
@@ -170,6 +220,7 @@ export function DNACard({ compact = false }: { compact?: boolean }) {
       </section>
     );
   const dna = record.payload;
+  const unverified = isUnverifiedDNA(dna);
   return (
     <section className="panel">
       <div className="section-title">
@@ -180,6 +231,33 @@ export function DNACard({ compact = false }: { compact?: boolean }) {
           {dna.coverage.completed} pages · {dna.coverage.status}
         </span>
       </div>
+      <p className="muted small">
+        Profile saved {new Date(dna.createdAt).toLocaleString()} · version{' '}
+        {dna.version}
+      </p>
+      {unverified && (
+        <p className="notice" role="alert">
+          This older profile contains unverified generated information. Scan the
+          website again before relying on it.
+        </p>
+      )}
+      {!dna.analysis && !unverified && w.localMode && !compact && (
+        <div className="notice spaced">
+          <p>
+            This saved profile predates the strategic analysis. Build strengths,
+            weaknesses, and experiments from the page evidence already saved.
+          </p>
+          <button
+            className="secondary-btn spaced"
+            disabled={w.busy}
+            onClick={() =>
+              void w.mutate('analyze-dna', { id: record.id }).catch(() => {})
+            }
+          >
+            Analyze saved evidence
+          </button>
+        </div>
+      )}
       <div className="row">
         {dna.logo && /^https?:/.test(dna.logo) ? (
           <img
@@ -192,7 +270,10 @@ export function DNACard({ compact = false }: { compact?: boolean }) {
         )}
         <div>
           <h2>{dna.name ?? w.brand?.name}</h2>
-          <p className="muted">{dna.tagline ?? 'No verified tagline found'}</p>
+          <p className="muted">
+            {dna.tagline ??
+              'No explicit slogan found in the sampled pages. You can add a correction below.'}
+          </p>
         </div>
       </div>
       <div className="spaced">
@@ -322,6 +403,8 @@ export function DNACard({ compact = false }: { compact?: boolean }) {
 export function BrandView() {
   const w = useWorkspace(),
     dna = w.records<BrandDNA>('dna')[0]?.payload;
+  const [colorsOpen, setColorsOpen] = useState(false);
+  const [colorLimit, setColorLimit] = useState(100);
   return (
     <div className="stack">
       <DNACard />
@@ -333,20 +416,59 @@ export function BrandView() {
       )}
       {dna && (
         <>
-          <div className="two-col">
+          <section className="panel" id="brand-strategy">
+            <div className="section-title">
+              <h2>Brand strategy &amp; opportunities</h2>
+              <span className="pill">
+                {dna.analysis ? 'Website evidence analysis' : 'Saved findings'}
+              </span>
+            </div>
+            {dna.analysis?.limitations.map((line, i) => (
+              <p className="muted small spaced" key={i}>
+                {line}
+              </p>
+            ))}
+            <div className="tabs-row spaced">
+              <a className="text-link" href="#brand-strengths">
+                Advantages
+              </a>
+              <a className="text-link" href="#brand-weaknesses">
+                Weaknesses
+              </a>
+              <a className="text-link" href="#brand-marketGaps">
+                Gaps to investigate
+              </a>
+              <a className="text-link" href="#brand-opportunities">
+                Experiments
+              </a>
+              <a className="text-link" href="#brand-platforms">
+                Channels
+              </a>
+            </div>
+            <button
+              className="secondary-btn spaced"
+              disabled={w.busy}
+              onClick={() =>
+                void w.mutate('scan', { brandId: w.brandId }).catch(() => {})
+              }
+            >
+              {w.busy ? 'Reading website…' : 'Refresh website & analysis'}
+            </button>
+          </section>
+          <div className="two-col brand-strategy-grid">
             {(
               [
-                'values',
-                'aesthetics',
-                'voice',
                 'strengths',
                 'weaknesses',
                 'marketGaps',
                 'opportunities',
+                'values',
+                'voice',
+                'aesthetics',
                 'competitors',
               ] as const
             ).map((key, i) => (
-              <section className="panel" key={key}>
+              <section className="panel" key={key} id={`brand-${key}`}>
                 <div className="section-title">
                   <h2>
                     {
@@ -354,10 +476,10 @@ export function BrandView() {
                         values: 'Brand values',
                         aesthetics: 'Brand aesthetic',
                         voice: 'Tone of voice',
-                        strengths: 'Strengths',
+                        strengths: 'Strengths & advantages',
                         weaknesses: 'Weaknesses',
-                        marketGaps: 'Market gaps',
-                        opportunities: 'Opportunities',
+                        marketGaps: 'Gaps to investigate',
+                        opportunities: 'Opportunities & experiments',
                         competitors: 'Competitor landscape',
                       }[key]
                     }
@@ -370,82 +492,114 @@ export function BrandView() {
                 </div>
                 {dna[key]?.length ? (
                   dna[key].map((f, j) => (
-                    <article className="data-card" key={j}>
-                      <span className="pill">{f.type}</span>
-                      <p>{f.text}</p>
-                      <details className="spaced small">
-                        <summary>View evidence</summary>
-                        {f.evidenceIds.map((id) => {
-                          const e = dna.evidence.find((e) => e.id === id);
-                          return e ? <Source key={id} evidence={e} /> : null;
-                        })}
-                      </details>
-                    </article>
+                    <BrandFinding finding={f} dna={dna} key={j} />
                   ))
                 ) : (
                   <p className="muted small">
-                    Not enough evidence to make a supported finding.
+                    {dna.analysis?.missing[key] ??
+                      'This saved profile has no analysis for this section. Refresh the website analysis to collect evidence and build supported findings.'}
                   </p>
                 )}
               </section>
             ))}
           </div>
           <section className="panel">
-            <h2>Complete observed color inventory</h2>
+            <h2>Observed color inventory</h2>
             <p className="muted small spaced">
-              Observed on the crawled pages. Visual estimates are labeled
-              separately from computed styles.
+              {dna.colors.length} declarations from the retrieved styles. CSS
+              declarations can include unused components and themes; they are
+              not a screenshot or a verified primary palette.
             </p>
-            <div
-              className="table-scroll spaced"
-              style={{ maxHeight: 420, overflow: 'auto' }}
-              aria-label="Observed color inventory"
-            >
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Color</TableHead>
-                    <TableHead>Selector</TableHead>
-                    <TableHead>Method</TableHead>
-                    <TableHead>Page</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dna.colors.map((c, i) => (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <span
-                          className="color-dot"
-                          style={{ background: c.value }}
-                        />
-                        {c.value}
-                      </TableCell>
-                      <TableCell>{c.selector}</TableCell>
-                      <TableCell>{c.method}</TableCell>
-                      <TableCell>
-                        <a
-                          className="source"
-                          href={c.url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {c.url}
-                        </a>
-                      </TableCell>
+            {!dna.colors.length && (
+              <p className="notice spaced">
+                No readable color declarations were retrieved. Scan a page with
+                accessible styles or consult your official brand guidelines.
+              </p>
+            )}
+            {!!dna.colors.length && (
+              <button
+                className="secondary-btn spaced"
+                aria-expanded={colorsOpen}
+                onClick={() => setColorsOpen((v) => !v)}
+              >
+                {colorsOpen
+                  ? 'Hide color inventory'
+                  : `Inspect ${dna.colors.length} color declarations`}
+              </button>
+            )}
+            {colorsOpen && (
+              <div
+                className="table-scroll spaced"
+                style={{ maxHeight: 420, overflow: 'auto' }}
+                aria-label="Observed color inventory"
+              >
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Color</TableHead>
+                      <TableHead>Selector</TableHead>
+                      <TableHead>Method</TableHead>
+                      <TableHead>Page</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {dna.colors.slice(0, colorLimit).map((c, i) => (
+                      <TableRow key={i}>
+                        <TableCell>
+                          <span
+                            className="color-dot"
+                            style={{ background: c.value }}
+                          />
+                          {c.value}
+                        </TableCell>
+                        <TableCell>{c.selector}</TableCell>
+                        <TableCell>{c.method}</TableCell>
+                        <TableCell>
+                          <a
+                            className="source"
+                            href={c.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {c.url}
+                          </a>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+            {colorsOpen && colorLimit < dna.colors.length && (
+              <button
+                className="text-link spaced"
+                onClick={() => setColorLimit((n) => n + 100)}
+              >
+                Show 100 more declarations (
+                {Math.min(colorLimit, dna.colors.length)} of {dna.colors.length}
+                )
+              </button>
+            )}
           </section>
-          <section className="panel">
+          <section className="panel" id="brand-platforms">
             <h2>Platform recommendations</h2>
+            <p className="muted small spaced">
+              Suggested tests based on the offer and language found on your
+              pages. Account analytics are needed to determine which channels
+              work best.
+            </p>
+            {!Object.keys(dna.recommendations).length && (
+              <p className="notice spaced">
+                Refresh the analysis to build channel experiments from readable
+                product or service copy.
+              </p>
+            )}
             <div className="two-col spaced">
               {Object.entries(dna.recommendations).map(([p, findings]) => (
                 <article className="data-card" key={p}>
                   <h3 className="capitalize">{p}</h3>
                   {findings.map((f, i) => (
-                    <p key={i}>{f.text}</p>
+                    <BrandFinding key={i} finding={f} dna={dna} />
                   ))}
                 </article>
               ))}
