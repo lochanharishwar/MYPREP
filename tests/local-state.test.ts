@@ -4,6 +4,7 @@ import {
   saveLocalState,
   readLocalResources,
   recoverLocalState,
+  restoreLocalState,
   type LocalState,
 } from '@/lib/local-state';
 const state: LocalState = {
@@ -122,9 +123,85 @@ describe('browser workspace persistence', () => {
         },
         state,
       ),
-    ).toThrow('Quota');
+    ).toThrow('Browser storage could not save');
     expect(() => loadLocalState({ getItem: () => '{"state":{}}' })).toThrow(
       'invalid',
     );
   });
+  it('still loads saved reports when recovery cannot be written', () => {
+    const snapshot = {
+      ...state,
+      resources: [
+        record('run', 'b', 'w', 'scan', { status: 'running' }),
+        record('dna', 'b', 'w', 'dna', { name: 'Saved brand' }),
+      ],
+    };
+    const restored = restoreLocalState({
+      getItem: () => JSON.stringify(snapshot),
+      setItem: () => {
+        throw new Error('QuotaExceededError');
+      },
+    });
+    expect(restored.snapshot?.resources[1]).toEqual(snapshot.resources[1]);
+    expect(restored.snapshot?.resources[0].payload.status).toBe('interrupted');
+    expect(restored.warning).toContain(
+      'previously saved results are unchanged',
+    );
+  });
+  it('does not recover or overwrite a run owned by another tab', () => {
+    const snapshot = {
+      ...state,
+      resources: [record('active', 'b', 'w', 'scan', { status: 'running' })],
+    };
+    let writes = 0;
+    const restored = restoreLocalState(
+      {
+        getItem: () => JSON.stringify(snapshot),
+        setItem: () => {
+          writes++;
+        },
+      },
+      false,
+    );
+    expect(restored.snapshot?.resources[0].payload.status).toBe('running');
+    expect(writes).toBe(0);
+  });
+  it('opens a healthy report without an unnecessary storage rewrite', () => {
+    const restored = restoreLocalState({
+      getItem: () => JSON.stringify(state),
+      setItem: () => {
+        throw new Error('Must not write');
+      },
+    });
+    expect(restored.snapshot).toEqual(state);
+    expect(restored.warning).toBe('');
+  });
+  it.each([true, false])(
+    'quarantines legacy fabricated content in memory even when writes are unavailable (recover=%s)',
+    (recover) => {
+      const saved = {
+        ...state,
+        resources: [
+          record('legacy', 'b', 'w', 'content', {
+            status: 'qualified',
+            review: { score: 10, passed: true },
+          }),
+        ],
+      };
+      const bytes = JSON.stringify(saved);
+      const restored = restoreLocalState(
+        {
+          getItem: () => bytes,
+          setItem: () => {
+            throw new Error('Full');
+          },
+        },
+        recover,
+      );
+      expect(restored.snapshot?.resources[0].payload.status).toBe(
+        'needs_revision',
+      );
+      expect(JSON.parse(bytes).resources[0].payload.status).toBe('qualified');
+    },
+  );
 });

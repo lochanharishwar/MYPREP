@@ -2,6 +2,16 @@
 
 The app can run locally without a BrandCurrent account. This assessment distinguishes tested code paths from activated external services.
 
+## Illustrated sections and reliability — 9 October 2026
+
+Added 19 original cartoon robot mascots to information sections across all six pages, following the user's final robot-badge reference. Strengths, weaknesses, gaps, experiments, values, voice, aesthetics and competitors each have a distinct character. The images are decorative and separate from evidence. Their combined optimized payload is approximately 595 KB; see `ROBOT_ARTWORK.md` for prompts and asset paths.
+
+Saved reports now hydrate even when a recovery write fails. Recovery respects an active mutation in another tab, while legacy unreviewed content remains quarantined in memory even when storage cannot be written. Scan progress counts pages as saved only after persistence succeeds. Storage failures preserve previous data and show a recovery explanation. The React context was moved to its own module to preserve its identity during provider hot reloads.
+
+Local generation now carries bounded Brand DNA voice, aesthetics, values, fonts, citations and policy constraints through caption generation, image generation and finished-output review. Thousands of unrelated color declarations are omitted from the request. Website statements are labeled first-party claims and interpretation remains distinct from verified product facts.
+
+Verification: 127 tests passed, including quota recovery, active-tab preservation, legacy-content quarantine, and all three provider prompt bodies retaining brand guidance. Provider transport tests are mocked; these changes do not establish live generation or publishing. Existing external activation requirements below still apply.
+
 | Area | Delivered and verified | Activation/coverage limit |
 | --- | --- | --- |
 | Local access | Browser workspace is selected in development even when Supabase is configured. Settings has no login/signup form. `npm run local` and PowerShell launcher provided. | Keep the local server running; use the same browser origin for saved data. |

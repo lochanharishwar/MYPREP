@@ -71,6 +71,7 @@ import {
   TableCell,
 } from '@/components/ui/table';
 import { useWorkspace } from './workspace-provider';
+import { SectionHeading, SectionMascot } from './section-heading';
 import type {
   BrandDNA,
   ContentVersion,
@@ -196,7 +197,7 @@ export function DNACard({ compact = false }: { compact?: boolean }) {
     return (
       <section className="panel">
         <div className="section-title">
-          <h2>Your Brand DNA</h2>
+          <SectionHeading character="identity">Your Brand DNA</SectionHeading>
           <span className="pill">Awaiting your website</span>
         </div>
         <div className="dna-empty">
@@ -224,7 +225,7 @@ export function DNACard({ compact = false }: { compact?: boolean }) {
   return (
     <section className="panel">
       <div className="section-title">
-        <h2>Your Brand DNA</h2>
+        <SectionHeading character="identity">Your Brand DNA</SectionHeading>
         <span
           className={`pill ${dna.coverage.status === 'complete' ? 'green' : 'amber'}`}
         >
@@ -418,7 +419,9 @@ export function BrandView() {
         <>
           <section className="panel" id="brand-strategy">
             <div className="section-title">
-              <h2>Brand strategy &amp; opportunities</h2>
+              <SectionHeading character="strategy">
+                Brand strategy &amp; opportunities
+              </SectionHeading>
               <span className="pill">
                 {dna.analysis ? 'Website evidence analysis' : 'Saved findings'}
               </span>
@@ -467,29 +470,22 @@ export function BrandView() {
                 'aesthetics',
                 'competitors',
               ] as const
-            ).map((key, i) => (
+            ).map((key) => (
               <section className="panel" key={key} id={`brand-${key}`}>
-                <div className="section-title">
-                  <h2>
+                <SectionHeading character={key} featured>
+                  {
                     {
-                      {
-                        values: 'Brand values',
-                        aesthetics: 'Brand aesthetic',
-                        voice: 'Tone of voice',
-                        strengths: 'Strengths & advantages',
-                        weaknesses: 'Weaknesses',
-                        marketGaps: 'Gaps to investigate',
-                        opportunities: 'Opportunities & experiments',
-                        competitors: 'Competitor landscape',
-                      }[key]
-                    }
-                  </h2>
-                  {i % 2 ? (
-                    <Lightbulb size={22} className="muted" />
-                  ) : (
-                    <Fingerprint size={22} className="muted" />
-                  )}
-                </div>
+                      values: 'Brand values',
+                      aesthetics: 'Brand aesthetic',
+                      voice: 'Tone of voice',
+                      strengths: 'Strengths & advantages',
+                      weaknesses: 'Weaknesses',
+                      marketGaps: 'Gaps to investigate',
+                      opportunities: 'Opportunities & experiments',
+                      competitors: 'Competitor landscape',
+                    }[key]
+                  }
+                </SectionHeading>
                 {dna[key]?.length ? (
                   dna[key].map((f, j) => (
                     <BrandFinding finding={f} dna={dna} key={j} />
@@ -504,7 +500,9 @@ export function BrandView() {
             ))}
           </div>
           <section className="panel">
-            <h2>Observed color inventory</h2>
+            <SectionHeading character="colors">
+              Observed color inventory
+            </SectionHeading>
             <p className="muted small spaced">
               {dna.colors.length} declarations from the retrieved styles. CSS
               declarations can include unused components and themes; they are
@@ -582,7 +580,9 @@ export function BrandView() {
             )}
           </section>
           <section className="panel" id="brand-platforms">
-            <h2>Platform recommendations</h2>
+            <SectionHeading character="platforms">
+              Platform recommendations
+            </SectionHeading>
             <p className="muted small spaced">
               Suggested tests based on the offer and language found on your
               pages. Account analytics are needed to determine which channels
@@ -656,7 +656,9 @@ export function ContentView() {
         <div className="section-title">
           <div>
             <span className="eyebrow">CAMPAIGN STUDIO</span>
-            <h2 className="spaced">Create a campaign</h2>
+            <SectionHeading character="campaign">
+              Create a campaign
+            </SectionHeading>
           </div>
           <Sparkles size={25} />
         </div>
@@ -878,7 +880,9 @@ export function ContentView() {
       </section>
       {runs.length > 0 && (
         <section className="panel">
-          <h2>Campaign activity</h2>
+          <SectionHeading character="campaign">
+            Campaign activity
+          </SectionHeading>
           <div className="card-list spaced">
             {runs.map((r) => (
               <article key={r.id} className="data-card">
@@ -925,10 +929,10 @@ export function ContentView() {
       )}
       <section className="panel">
         <div className="section-title">
-          <h2>
+          <SectionHeading character="review">
             Approval gallery{' '}
             <span className="muted small">({contents.length})</span>
-          </h2>
+          </SectionHeading>
           <span className="pill green">
             <ShieldCheck size={12} /> Reviewed before you see it
           </span>
@@ -1157,7 +1161,9 @@ export function ScheduleView() {
     <div className="stack">
       <div className="section-title">
         <div>
-          <h2>A good idea deserves its moment.</h2>
+          <SectionHeading character="schedule">
+            A good idea deserves its moment.
+          </SectionHeading>
           <p className="muted small spaced">
             Approved versions, connected accounts, and a time that works for
             your audience.
@@ -1173,6 +1179,9 @@ export function ScheduleView() {
       </div>
       <ActivationNotice feature="publishing" />
       <section className="panel">
+        <SectionHeading character="schedule">
+          Publication calendar
+        </SectionHeading>
         <Tabs defaultValue="list">
           <div className="section-title">
             <TabsList>
@@ -1468,7 +1477,9 @@ export function AnalyticsView() {
   return (
     <div className="stack">
       <div className="section-title">
-        <h2>Understand the impression you leave.</h2>
+        <SectionHeading character="analytics">
+          Understand the impression you leave.
+        </SectionHeading>
         <Dropdown
           value={campaign}
           onChange={setCampaign}
@@ -1501,6 +1512,16 @@ export function AnalyticsView() {
           ['views', 'Views'],
         ].map(([key, label]) => (
           <section className="panel" key={key}>
+            <SectionMascot
+              character={
+                key === 'likes'
+                  ? 'voice'
+                  : key === 'reach'
+                    ? 'platforms'
+                    : 'analytics'
+              }
+              className="metric-mascot"
+            />
             <div className="small muted">{label}</div>
             <div className="metric-value">
               {total(key)?.toLocaleString() ?? '—'}
@@ -1516,7 +1537,9 @@ export function AnalyticsView() {
       <div className="two-col">
         <section className="panel glass">
           <div className="section-title">
-            <h2>Performance over time</h2>
+            <SectionHeading character="analytics">
+              Performance over time
+            </SectionHeading>
             <Dropdown
               value={metric}
               onChange={setMetric}
@@ -1593,7 +1616,9 @@ export function AnalyticsView() {
           )}
         </section>
         <section className="panel">
-          <h2>Channel perspective</h2>
+          <SectionHeading character="platforms">
+            Channel perspective
+          </SectionHeading>
           {comparison.length ? (
             <div className="chart-box spaced">
               <ResponsiveContainer width="100%" height="100%">
@@ -1625,7 +1650,9 @@ export function AnalyticsView() {
       </p>
       {latest.length > 0 && (
         <section className="panel">
-          <h2>Observation freshness & definitions</h2>
+          <SectionHeading character="sources">
+            Observation freshness & definitions
+          </SectionHeading>
           <Table>
             <TableBody>
               {latest.map((o) => (
@@ -1667,7 +1694,9 @@ export function AnalyticsView() {
         </section>
       )}
       <section className="panel">
-        <h2>Audience sentiment & themes</h2>
+        <SectionHeading character="voice">
+          Audience sentiment & themes
+        </SectionHeading>
         {w.records<{
           postId: string;
           items: { id: string; sentiment: string; theme: string }[];
@@ -1723,7 +1752,9 @@ export function AnalyticsView() {
         )}
       </section>
       <section className="panel glass">
-        <h2>Competitor & market reading</h2>
+        <SectionHeading character="competitors">
+          Competitor & market reading
+        </SectionHeading>
         {w.records<{
           title: string;
           description: string;
@@ -1767,7 +1798,9 @@ export function AnalyticsView() {
         )}
       </section>
       <section className="panel">
-        <h2>Signals worth your attention</h2>
+        <SectionHeading character="opportunities">
+          Signals worth your attention
+        </SectionHeading>
         {w.records<Insight>('insight').length ? (
           <div className="two-col spaced">
             {w.records<Insight>('insight').map((i) => (
@@ -1871,7 +1904,9 @@ export function InsightsView() {
     <div className="stack">
       <div className="section-title">
         <div>
-          <h2>Beyond the click. Into the why.</h2>
+          <SectionHeading character="customers">
+            Beyond the click. Into the why.
+          </SectionHeading>
           <p className="muted small spaced">
             Follow recorded journeys, understand customer feedback, and decide
             what to try next.
@@ -1948,6 +1983,12 @@ export function InsightsView() {
           ],
         ].map(([title, value, desc]) => (
           <section className="panel" key={title}>
+            <SectionMascot
+              character={
+                title === 'Verified purchases' ? 'review' : 'analytics'
+              }
+              className="metric-mascot"
+            />
             <p className="muted small">{title}</p>
             <div className="metric-value">{value}</div>
             <p className="muted small">{desc}</p>
@@ -1957,7 +1998,9 @@ export function InsightsView() {
       <div className="two-col">
         <section className="panel glass">
           <div className="section-title">
-            <h2>Where credit belongs</h2>
+            <SectionHeading character="strategy">
+              Where credit belongs
+            </SectionHeading>
             <Dropdown
               value={model}
               onChange={setModel}
@@ -2012,7 +2055,9 @@ export function InsightsView() {
           )}
         </section>
         <section className="panel">
-          <h2>Your first-party data connection</h2>
+          <SectionHeading character="connections">
+            Your first-party data connection
+          </SectionHeading>
           <p className="muted small spaced">
             Track page views and engagement on your website. Send purchases,
             refunds, and identity links through signed server webhooks.
@@ -2079,7 +2124,9 @@ export function InsightsView() {
         reason?: string;
       }>('markov')[0] && (
         <section className="panel">
-          <h2>Markov attribution</h2>
+          <SectionHeading character="analytics">
+            Markov attribution
+          </SectionHeading>
           <p className="small muted">
             Rolling model window:{' '}
             {w
@@ -2115,7 +2162,9 @@ export function InsightsView() {
       )}
       <section className="panel">
         <div className="section-title">
-          <h2>From a signal to an experiment</h2>
+          <SectionHeading character="opportunities">
+            From a signal to an experiment
+          </SectionHeading>
           <span className="pill">AGENTS 08 + 09</span>
         </div>
         {insight.length ? (
@@ -2156,7 +2205,9 @@ export function InsightsView() {
       </section>
       <div className="two-col">
         <section className="panel">
-          <h2>Customer journeys</h2>
+          <SectionHeading character="customers">
+            Customer journeys
+          </SectionHeading>
           {customers.length ? (
             <Table>
               <TableHeader>
@@ -2187,7 +2238,9 @@ export function InsightsView() {
           )}
         </section>
         <section className="panel">
-          <h2>Account-based marketing</h2>
+          <SectionHeading character="competitors">
+            Account-based marketing
+          </SectionHeading>
           {accounts.length ? (
             <Table>
               <TableBody>

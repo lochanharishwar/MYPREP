@@ -1,12 +1,16 @@
 import type { WorkspaceState, Entity } from './contracts';
 export const LOCAL_STATE_KEY = 'bc_local_workspace_v1';
 export type LocalState = { state: WorkspaceState; resources: Entity[] };
-export function recoverLocalState(snapshot: LocalState): LocalState {
+export function recoverLocalState(
+  snapshot: LocalState,
+  interruptRuns = true,
+): LocalState {
   return {
     ...snapshot,
     resources: snapshot.resources.map((record) => {
       let payload = record.payload;
       if (
+        interruptRuns &&
         ['running', 'generating', 'reviewing'].includes(String(payload.status))
       )
         payload = {
@@ -28,7 +32,39 @@ export function saveLocalState(
   storage: Pick<Storage, 'setItem'>,
   snapshot: LocalState,
 ) {
-  storage.setItem(LOCAL_STATE_KEY, JSON.stringify(snapshot));
+  try {
+    storage.setItem(LOCAL_STATE_KEY, JSON.stringify(snapshot));
+  } catch (cause) {
+    throw new Error(
+      'Browser storage could not save this update. Your previously saved results are unchanged. Free browser storage before retrying, and export your Brand DNA before clearing any site data.',
+      { cause },
+    );
+  }
+}
+// Reading existing data must not depend on being able to write its recovery
+// status back. A full browser store can still contain a perfectly valid report.
+export function restoreLocalState(
+  storage: Pick<Storage, 'getItem' | 'setItem'>,
+  recover = true,
+) {
+  const saved = loadLocalState(storage);
+  if (!saved) return { snapshot: null, warning: '' };
+  const next = recoverLocalState(saved, recover);
+  if (!recover) return { snapshot: next, warning: '' };
+  if (!next.resources.some((r, i) => r.payload !== saved.resources[i].payload))
+    return { snapshot: saved, warning: '' };
+  try {
+    saveLocalState(storage, next);
+    return { snapshot: next, warning: '' };
+  } catch (error) {
+    return {
+      snapshot: next,
+      warning:
+        error instanceof Error
+          ? error.message
+          : 'Saved results loaded, but recovery could not be saved.',
+    };
+  }
 }
 export function loadLocalState(
   storage: Pick<Storage, 'getItem'>,

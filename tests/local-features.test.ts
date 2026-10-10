@@ -243,6 +243,38 @@ describe('Real image generation contract (mocked provider transport)', () => {
       request('generate', {
         ...brief,
         referenceUrl: 'https://example.com/product.png',
+        brand: {
+          ...brief.brand,
+          voice: [
+            {
+              text: 'Calm practical language',
+              type: 'interpretation',
+              evidenceIds: ['voice-source'],
+            },
+          ],
+          aesthetics: [
+            {
+              text: 'Restrained teal details',
+              type: 'interpretation',
+              evidenceIds: ['voice-source'],
+            },
+          ],
+          fonts: ['Inter'],
+          evidence: [
+            {
+              id: 'voice-source',
+              url: 'https://example.com/about',
+              excerpt: 'Designed for everyday commuting.',
+              observedAt: '2026-10-09T00:00:00Z',
+              method: 'dom',
+              confidence: 0.9,
+            },
+          ],
+          governance: {
+            toneRules: 'Avoid hype',
+            forbiddenClaims: ['Guaranteed results'],
+          },
+        },
       }),
     );
     expect(r.status).toBe(200);
@@ -261,6 +293,15 @@ describe('Real image generation contract (mocked provider transport)', () => {
     expect(requests[2].body.contents[0].parts[0].text).toContain(
       'A bicycle for your daily commute.',
     );
+    for (const sent of requests) {
+      const prompt = sent.body.contents[0].parts[0].text;
+      expect(prompt).toContain('Calm practical language');
+      expect(prompt).toContain('Restrained teal details');
+      expect(prompt).toContain('voice-source');
+      expect(prompt).toContain('Avoid hype');
+      expect(prompt).toContain('Guaranteed results');
+      expect(prompt).toContain('not independently verified');
+    }
   });
   it('surfaces provider quota failure without a fallback image', async () => {
     vi.stubEnv('GEMINI_API_KEY', 'fixture-test-key');

@@ -1,7 +1,5 @@
 'use client';
 import {
-  createContext,
-  useContext,
   useEffect,
   useState,
   useCallback,
@@ -22,11 +20,12 @@ import {
   type ContentVersion,
 } from '@/lib/contracts';
 import { contentHash, normalizeUrl } from '@/lib/domain';
+import { creativeBrandContext } from '@/lib/creative-context';
 import {
   loadLocalState,
   saveLocalState,
   readLocalResources,
-  recoverLocalState,
+  restoreLocalState,
 } from '@/lib/local-state';
 import { storeLocalMedia, deleteLocalMedia } from '@/lib/local-media';
 import { scanWithProgress } from '@/lib/scan-stream';
@@ -42,39 +41,8 @@ const empty: WorkspaceState = {
   entities: [],
   services: [],
 };
-type PageInfo = { total: number; nextCursor: string | null };
-interface Context {
-  state: WorkspaceState;
-  client: SupabaseClient | null;
-  session: Session | null;
-  brand: WorkspaceState['brands'][number] | undefined;
-  brandId: string;
-  setBrandId: (v: string) => void;
-  workspaceId: string;
-  setWorkspaceId: (v: string) => void;
-  records: <T>(kind: string) => Entity<T>[];
-  pages: Record<string, PageInfo>;
-  loadMore: (kind: string) => Promise<void>;
-  loading: boolean;
-  busy: boolean;
-  notice: string;
-  setNotice: (v: string) => void;
-  mutate: <T = Record<string, unknown>>(
-    action: string,
-    body: unknown,
-  ) => Promise<T>;
-  read: <T>(path: string, options?: { signal?: AbortSignal }) => Promise<T>;
-  refresh: () => Promise<void>;
-  settings: boolean;
-  localMode: boolean;
-  setSettings: (v: boolean) => void;
-}
-const WorkspaceContext = createContext<Context | null>(null);
-export function useWorkspace() {
-  const c = useContext(WorkspaceContext);
-  if (!c) throw new Error('Workspace context unavailable');
-  return c;
-}
+import { WorkspaceContext, type PageInfo } from './workspace-context';
+export { useWorkspace } from './workspace-context';
 const resourcesByPath: Record<string, string[]> = {
   '/': ['dna', 'scan', 'activity', 'campaign', 'schedule', 'connection'],
   '/brand-dna': [
@@ -131,7 +99,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             services: WorkspaceState['services'];
           }>,
       )
-      .then((config) => {
+      .then(async (config) => {
         if (disposed) return;
         setState((s) => ({
           ...s,
@@ -168,14 +136,21 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         } else {
           setLocalMode(true);
           try {
-            const loaded = loadLocalState(localStorage);
-            const saved = loaded ? recoverLocalState(loaded) : null;
+            const restored = navigator.locks
+              ? await navigator.locks.request(
+                  'bc-workspace-mutation',
+                  { ifAvailable: true },
+                  (lock) => restoreLocalState(localStorage, !!lock),
+                )
+              : restoreLocalState(localStorage, false);
+            if (disposed) return;
+            const saved = restored.snapshot;
+            if (restored.warning) setNotice(restored.warning);
             if (saved?.state?.workspace) {
               localSnapshot.current = {
                 state: { ...saved.state, services: config.services },
                 resources: saved.resources,
               };
-              saveLocalState(localStorage, localSnapshot.current);
               setState({ ...saved.state, services: config.services });
               setResources(saved.resources ?? []);
               setWorkspace(saved.state.workspace.id);
@@ -211,9 +186,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
                 JSON.stringify({ state: local, resources: [] }),
               );
             }
-          } catch {
+          } catch (error) {
             setNotice(
-              'Browser storage is unavailable. Local work will not persist.',
+              error instanceof Error
+                ? error.message
+                : 'Browser storage is unavailable. Saved data has not been changed.',
             );
           }
           setLoading(false);
@@ -600,8 +577,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         const result = await scanWithProgress(
           brand.website,
           (result, complete) => {
-            savedPages = result.dna.coverage.completed;
-            latestScan = {
+            const nextScan = {
               ...scan,
               payload: {
                 ...scan.payload,
@@ -617,7 +593,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
                 }),
                 id: dnaId,
               },
-              latestScan,
+              nextScan,
               ...(result.pages ?? []).map((p) => {
                 const old = snapshot().resources.find(
                   (r) =>
@@ -631,6 +607,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
                 };
               }),
             );
+            latestScan = nextScan;
+            savedPages = result.dna.coverage.completed;
             if (!complete)
               setNotice(
                 `Read ${savedPages} ${savedPages === 1 ? 'page' : 'pages'} from ${new URL(brand.website).hostname}. Findings saved; checking more pages…`,
@@ -642,27 +620,31 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         );
         return { jobId: scan.id } as T;
       } catch (e) {
-        put({
-          ...latestScan,
-          payload: {
-            ...latestScan.payload,
-            status: savedPages ? 'partial' : 'blocked',
-            error: savedPages
-              ? null
-              : e instanceof Error
-                ? e.message
-                : 'Scan failed.',
-            ...(savedPages
-              ? {
-                  warnings: [
-                    String(
-                      e instanceof Error ? e.message : 'Scan interrupted.',
-                    ),
-                  ],
-                }
-              : {}),
-          },
-        });
+        try {
+          put({
+            ...latestScan,
+            payload: {
+              ...latestScan.payload,
+              status: savedPages ? 'partial' : 'blocked',
+              error: savedPages
+                ? null
+                : e instanceof Error
+                  ? e.message
+                  : 'Scan failed.',
+              ...(savedPages
+                ? {
+                    warnings: [
+                      String(
+                        e instanceof Error ? e.message : 'Scan interrupted.',
+                      ),
+                    ],
+                  }
+                : {}),
+            },
+          });
+        } catch {
+          throw e;
+        }
         if (savedPages) {
           setNotice(
             `${savedPages} pages saved. The connection ended before the remaining pages finished. Your results are available below.`,
@@ -840,7 +822,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               ...input,
               formats: [pair.format],
               platforms: [pair.platform],
-              brand: dna.payload,
+              brand: creativeBrandContext(dna.payload as unknown as BrandDNA),
               attempt,
               feedback,
               referenceUrl: campaign.payload.referenceUrl,

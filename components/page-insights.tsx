@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { Entity, Finding } from '@/lib/contracts';
 import { useWorkspace } from './workspace-provider';
+import { SectionHeading } from './section-heading';
 import { ThinkingIndicator } from './thinking-indicator';
 
 type PageInsight = {
@@ -204,7 +205,9 @@ export function PageInsights() {
   const [query, setQuery] = useState('');
   return (
     <section className="panel">
-      <h2>Every page. Its own perspective.</h2>
+      <SectionHeading character="sources">
+        Every page. Its own perspective.
+      </SectionHeading>
       <div className="scan-form spaced">
         <Search size={18} aria-hidden="true" />
         <input

@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useWorkspace } from './workspace-provider';
+import { SectionHeading } from './section-heading';
 import type { MetricObservation } from '@/lib/contracts';
 import { Table, TableBody, TableCell, TableRow } from './ui/table';
 
@@ -211,7 +212,9 @@ export function FunnelPanel() {
   return (
     <section className="panel">
       <div className="section-title">
-        <h2>First-party conversion funnel</h2>
+        <SectionHeading character="customers">
+          First-party conversion funnel
+        </SectionHeading>
         <button
           className="secondary-btn"
           disabled={w.busy || !w.brandId}

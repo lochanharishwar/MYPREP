@@ -22,6 +22,11 @@ import {
   LockKeyhole,
 } from 'lucide-react';
 import { useWorkspace } from './workspace-provider';
+import {
+  SectionHeading,
+  SectionMascot,
+  type SectionCharacter,
+} from './section-heading';
 import { ResourcePaging } from './resource-paging';
 import { WorkspaceSettings } from './workspace-settings';
 import { ThinkingIndicator } from './thinking-indicator';
@@ -149,7 +154,9 @@ function Dashboard() {
           <span className="pill green">
             <span className="dot" /> START WITH YOUR BRAND
           </span>
-          <h2>Good marketing starts with understanding.</h2>
+          <SectionHeading character="strategy">
+            Good marketing starts with understanding.
+          </SectionHeading>
           <p>
             Read your public pages, inspect the sources, and get practical brand
             findings and campaign experiments.
@@ -210,7 +217,9 @@ function Dashboard() {
         {scan && (
           <section className="panel">
             <div className="section-title">
-              <h2>Website discovery</h2>
+              <SectionHeading character="sources">
+                Website discovery
+              </SectionHeading>
               <output className="pill">
                 {['running', 'queued', 'building_dna'].includes(
                   scan.payload.status,
@@ -298,7 +307,15 @@ function Dashboard() {
           ].map((q) => (
             <Link href={q.path} key={q.path} className="panel quick-card">
               <div className="row">
-                <q.icon size={21} className="quick-icon" />
+                <SectionMascot
+                  character={
+                    q.path === '/content'
+                      ? 'campaign'
+                      : q.path === '/schedule'
+                        ? 'schedule'
+                        : 'analytics'
+                  }
+                />
                 <ArrowUpRight size={15} className="muted" />
               </div>
               <h3>{q.name}</h3>
@@ -309,7 +326,9 @@ function Dashboard() {
       </div>
       <aside className="panel">
         <div className="section-title">
-          <h3>Your agent team</h3>
+          <SectionHeading character="connections" as="h3">
+            Your agent team
+          </SectionHeading>
           <span className="mono muted">09 AGENTS</span>
         </div>
         <output className="agent-thinking">
@@ -339,7 +358,24 @@ function Dashboard() {
                 {activeAgent === i + 1 ? (
                   <ThinkingIndicator state={a.orb} />
                 ) : (
-                  <a.icon size={16} />
+                  <SectionMascot
+                    character={
+                      (
+                        [
+                          'sources',
+                          'identity',
+                          'campaign',
+                          'review',
+                          'schedule',
+                          'voice',
+                          'analytics',
+                          'strategy',
+                          'customers',
+                        ] as SectionCharacter[]
+                      )[i]
+                    }
+                    className="agent-mascot"
+                  />
                 )}
               </span>
               <span className="agent-text">{a.name}</span>

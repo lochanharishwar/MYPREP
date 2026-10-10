@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { BrandDNA, Entity } from '@/lib/contracts';
 import { brandPolicySchema } from '@/lib/brand-policy';
 import { useWorkspace } from './workspace-provider';
+import { SectionHeading } from './section-heading';
 import { PinBrandAsset } from './pin-brand-asset';
 export function BrandGovernance({ record }: { record: Entity<BrandDNA> }) {
   const w = useWorkspace();
@@ -20,7 +21,7 @@ export function BrandGovernance({ record }: { record: Entity<BrandDNA> }) {
   return (
     <section className="panel">
       <div className="section-title">
-        <h2>Brand governance</h2>
+        <SectionHeading character="review">Brand governance</SectionHeading>
         <span className="pill">
           {record.payload.governance?.approvedBy
             ? 'Owner-approved version'
