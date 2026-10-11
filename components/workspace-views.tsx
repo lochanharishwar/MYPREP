@@ -87,7 +87,8 @@ import { platforms } from '@/lib/contracts';
 import { Empty } from './marketing-app';
 import { ContentMedia } from './content-media';
 import { useReport, ReportControls } from './report-controls';
-import { postingWindows } from '@/lib/timing';
+import { SocialConnections } from './social-connections';
+import { PostingPlanner } from './posting-planner';
 import {
   EvidenceDetails,
   CustomerJourney,
@@ -1112,6 +1113,13 @@ export function ScheduleView() {
     [localTime, setLocalTime] = useState(''),
     [timezone, setTimezone] = useState('Asia/Kolkata');
   const [month, setMonth] = useState(new Date());
+  const [planningAccount, setPlanningAccount] = useState('');
+  const [plannedTime, setPlannedTime] = useState('');
+  const accounts = w.records<{
+    name: string;
+    platform: string;
+    status: string;
+  }>('connection');
   const unscheduled = approvals.filter(
     (a) =>
       !posts.some(
@@ -1124,12 +1132,6 @@ export function ScheduleView() {
     editing?.payload.accountId ??
     approvals.find((a) => a.id === approval)?.payload.accountId ??
     '';
-  const windows = postingWindows(
-    posts,
-    w.records<MetricObservation>('metrics'),
-    destination,
-    timezone,
-  );
   const first = new Date(month.getFullYear(), month.getMonth(), 1),
     days = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const cells = Array.from(
@@ -1177,7 +1179,70 @@ export function ScheduleView() {
           <CalendarDays size={16} /> Schedule content
         </button>
       </div>
-      <ActivationNotice feature="publishing" />
+      <SocialConnections />
+      <section className="panel schedule-planning">
+        <div className="planner-controls">
+          <label className="field">
+            Account
+            <select
+              value={planningAccount}
+              onChange={(e) => setPlanningAccount(e.target.value)}
+            >
+              <option value="">Choose an account</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.payload.name} · {a.payload.platform}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            Timezone
+            <select
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+            >
+              {[
+                'Asia/Kolkata',
+                'UTC',
+                'America/New_York',
+                'America/Los_Angeles',
+                'Europe/London',
+                'Europe/Berlin',
+                'Asia/Singapore',
+                'Australia/Sydney',
+              ].map((tz) => (
+                <option key={tz}>{tz}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <PostingPlanner
+          accountId={planningAccount}
+          timezone={timezone}
+          selectedTime={plannedTime}
+          onChoose={(time) => {
+            setPlannedTime(time);
+            if (!w.localMode && unscheduled.length) {
+              const suggested = unscheduled.find(
+                (a) => a.payload.accountId === planningAccount,
+              );
+              setEditing(null);
+              setApproval(suggested?.id ?? '');
+              setLocalTime(time);
+              setModal(true);
+            }
+          }}
+        />
+        {plannedTime && (
+          <p className="notice small" role="status">
+            Selected: {plannedTime.replace('T', ' ')} · {timezone}.
+            {w.localMode
+              ? ' This is a planning selection. Activate account connections and background publishing to schedule automatically.'
+              : ' Choose an approved version to save this schedule.'}
+          </p>
+        )}
+      </section>
       <section className="panel">
         <SectionHeading character="schedule">
           Publication calendar
@@ -1365,7 +1430,7 @@ export function ScheduleView() {
         </Tabs>
       </section>
       <Dialog open={modal} onOpenChange={setModal}>
-        <DialogContent>
+        <DialogContent className="dialog-scroll sm:max-w-3xl">
           <DialogTitle>
             {editing ? 'Reschedule post' : 'Give your content a moment'}
           </DialogTitle>
@@ -1422,20 +1487,12 @@ export function ScheduleView() {
                 placeholder="Asia/Kolkata"
               />
             </label>
-            <div className="notice">
-              {windows.experimental
-                ? 'Experimental starting windows'
-                : `Based on ${windows.sampleCount} posts from this account`}
-              :{' '}
-              {windows.hours
-                .map((h) => String(h).padStart(2, '0') + ':00')
-                .join(', ')}{' '}
-              in {timezone}.{' '}
-              {windows.experimental
-                ? 'More comparable account history is needed.'
-                : 'Ranked by impressions observed 24–48 hours after publication.'}{' '}
-              These windows do not predict future reach.
-            </div>
+            <PostingPlanner
+              accountId={destination}
+              timezone={timezone}
+              selectedTime={localTime}
+              onChoose={setLocalTime}
+            />
             <button
               className="primary-btn"
               disabled={w.busy || (!editing && !approval)}

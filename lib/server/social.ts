@@ -38,7 +38,7 @@ export const capabilities: Record<
   },
   youtube: {
     formats: ['video'],
-    note: 'Public uploads require a verified YouTube API project.',
+    note: 'A YouTube channel and authorized upload access are required; account settings can restrict publication.',
     captionLimit: 5000,
   },
   x: {

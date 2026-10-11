@@ -47,6 +47,14 @@ export const serviceStatus = () => [
     detail: 'Inngest event and signing keys; reachable callback required',
   },
   {
+    name: 'Social token protection',
+    ready:
+      !!env('TOKEN_ENCRYPTION_KEY') ||
+      (!!env('TOKEN_ACTIVE_KEY_ID') && !!env('TOKEN_ENCRYPTION_KEYS')),
+    detail:
+      'Server encryption for social account access. No account tokens are stored in the browser.',
+  },
+  {
     name: 'Media & attribution',
     ready: !!env('PROCESSOR_URL') && !!env('PROCESSOR_SECRET'),
     detail: 'Cloud Run Python processor',

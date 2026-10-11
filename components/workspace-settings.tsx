@@ -16,7 +16,7 @@ import {
   SelectItem,
 } from '@/components/ui/select';
 import { useWorkspace } from './workspace-provider';
-import { platforms } from '@/lib/contracts';
+import { SocialConnections } from './social-connections';
 import { GovernancePanel } from './governance-panel';
 import { IdentityControls } from './identity-controls';
 import { ConfirmAction } from './confirm-action';
@@ -31,12 +31,6 @@ export function WorkspaceSettings() {
     [inviteEmail, setInviteEmail] = useState(''),
     [role, setRole] = useState('editor'),
     [message, setMessage] = useState('');
-  const connections = w.records<{
-    platform: string;
-    name: string;
-    status: string;
-    destination?: string;
-  }>('connection');
   const run = async (fn: () => Promise<unknown>, success?: string) => {
     if (running.current) return;
     running.current = true;
@@ -365,124 +359,28 @@ export function WorkspaceSettings() {
               {!w.localMode && <GovernancePanel />}
             </TabsContent>
             <TabsContent value="connections">
-              <div className="spaced">
-                {w.localMode && (
-                  <p className="notice">
-                    Website scans work without a key. For local image creation,
-                    configure GEMINI_API_KEY, COST_TEXT and COST_IMAGE on the
-                    server, then restart it. Social sign-in and unattended
-                    posting also need Supabase, Inngest and your platform OAuth
-                    apps. This browser workspace cannot run jobs after it
-                    closes.
-                  </p>
-                )}
-                <p className="muted small">
-                  A configured service has credentials available. A connected
-                  social account has completed authorization; platform approval
-                  requirements still apply.
-                </p>
-                {w.state.services.map((s) => (
-                  <div className="integration-row" key={s.name}>
+              <SocialConnections />
+              <details className="spaced">
+                <summary>Service configuration</summary>
+                {w.state.services.map((service) => (
+                  <div className="integration-row" key={service.name}>
                     <div>
-                      <h3>{s.name}</h3>
-                      <p className="muted small">{s.detail}</p>
+                      <h3>{service.name}</h3>
+                      <p className="muted small">{service.detail}</p>
                     </div>
-                    <span className={`pill ${s.ready ? 'green' : 'amber'}`}>
-                      {s.ready ? (
+                    <span
+                      className={`pill ${service.ready ? 'green' : 'amber'}`}
+                    >
+                      {service.ready ? (
                         <CheckCircle2 size={12} />
                       ) : (
                         <Plug size={12} />
-                      )}{' '}
-                      {s.ready ? 'Configured' : 'Setup needed'}
+                      )}
+                      {service.ready ? 'Configured' : 'Setup needed'}
                     </span>
                   </div>
                 ))}
-                <h3 className="spaced">
-                  Social accounts · {w.brand?.name ?? 'Select a brand'}
-                </h3>
-                {platforms.map((p) => (
-                  <div className="integration-row" key={p}>
-                    <div>
-                      <h3 className="capitalize">{p}</h3>
-                      {connections
-                        .filter((c) => c.payload.platform === p)
-                        .map((c) => (
-                          <div key={c.id}>
-                            <p className="small muted">
-                              {c.payload.name} · {c.payload.status}
-                            </p>
-                            {['reddit', 'linkedin'].includes(p) && (
-                              <form
-                                className="row spaced"
-                                onSubmit={(e) => {
-                                  e.preventDefault();
-                                  const f = new FormData(e.currentTarget);
-                                  void run(
-                                    () =>
-                                      w.mutate('connection', {
-                                        id: c.id,
-                                        destination: f.get('destination'),
-                                      }),
-                                    'Destination saved.',
-                                  );
-                                }}
-                              >
-                                <input
-                                  className="text-input"
-                                  name="destination"
-                                  aria-label={`${p} destination`}
-                                  placeholder={
-                                    p === 'reddit'
-                                      ? 'Subreddit without r/'
-                                      : 'urn:li:organization:...'
-                                  }
-                                  defaultValue={c.payload.destination}
-                                />
-                                <button className="secondary-btn">Save</button>
-                              </form>
-                            )}
-                            <ConfirmAction
-                              key={`${w.workspaceId}:${c.id}:disconnect`}
-                              label="Disconnect"
-                              className="text-link small"
-                              title={`Disconnect ${c.payload.name}?`}
-                              description="This removes the saved credentials for this account. Published posts remain live, and uploads already dispatched may still finish. Reconnect the account before scheduling new publications."
-                              confirmLabel="Disconnect account"
-                              disabled={w.busy || saving}
-                              onConfirm={async () => {
-                                await w.mutate('connection', {
-                                  id: c.id,
-                                  disconnect: true,
-                                });
-                                setMessage('Account disconnected.');
-                              }}
-                            />
-                          </div>
-                        ))}
-                    </div>
-                    <button
-                      className="secondary-btn"
-                      disabled={
-                        w.localMode ||
-                        !w.brandId ||
-                        w.state.workspace?.role !== 'owner' ||
-                        w.busy
-                      }
-                      onClick={() =>
-                        void run(async () => {
-                          const r = await w.mutate<{ url: string }>('connect', {
-                            brandId: w.brandId,
-                            platform: p,
-                          });
-                          location.assign(r.url);
-                        })
-                      }
-                    >
-                      Connect
-                    </button>
-                  </div>
-                ))}
-              </div>
+              </details>
             </TabsContent>
             <TabsContent value="team">
               <div className="stack spaced">

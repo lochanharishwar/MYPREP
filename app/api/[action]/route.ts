@@ -13,6 +13,7 @@ import {
   rpc,
 } from '@/lib/server/db';
 import { required } from '@/lib/server/env';
+import { oauthCookie } from '@/lib/server/oauth-browser';
 import { assertRole, contentHash, parseCSV, utcFromLocal } from '@/lib/domain';
 import {
   campaignSchema,
@@ -600,6 +601,12 @@ export async function POST(
       owner();
       if (!brandId) throw new Error('Select a brand.');
       const platform = z.enum(platforms).parse(body.platform);
+      required(platform.toUpperCase() + '_CLIENT_ID');
+      required(platform.toUpperCase() + '_CLIENT_SECRET');
+      const returnTo = z
+        .enum(['/', '/schedule', '/analytics'])
+        .default('/schedule')
+        .parse(body.returnTo);
       const verifier = Buffer.from(
         crypto.getRandomValues(new Uint8Array(40)),
       ).toString('base64url');
@@ -608,10 +615,21 @@ export async function POST(
         userId: s.user.id,
         expiresAt: Date.now() + 600000,
         verifier: await encrypt(verifier),
+        returnTo,
       });
-      return Response.json({
-        url: await authorizationUrl(platform, state.id, verifier),
-      });
+      return Response.json(
+        { url: await authorizationUrl(platform, state.id, verifier) },
+        {
+          headers: {
+            'Set-Cookie': oauthCookie(
+              platform,
+              state.id,
+              new URL(required('APP_ORIGIN')).protocol === 'https:',
+            ),
+            'Cache-Control': 'no-store',
+          },
+        },
+      );
     }
     if (action === 'connection') {
       owner();
