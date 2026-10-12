@@ -1174,6 +1174,7 @@ fieldset {
 }
 .illustrated-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 16px;
   min-width: 0;
@@ -1182,39 +1183,48 @@ fieldset {
 .illustrated-heading > h2,
 .illustrated-heading > h3 {
   margin: 0;
+  flex: 1 1 150px;
   min-width: 0;
   text-wrap: balance;
 }
 .section-mascot {
-  width: 84px;
-  height: 84px;
+  width: 126px;
+  height: 126px;
   object-fit: contain;
   flex: 0 0 auto;
   filter: drop-shadow(0 7px 15px #0004);
 }
 .illustrated-heading-featured {
   gap: 20px;
-  min-height: 138px;
+  min-height: 204px;
   padding-bottom: 14px;
   border-bottom: 1px solid #ffffff0d;
   margin-bottom: 20px;
 }
 .illustrated-heading-featured .section-mascot {
-  width: 132px;
-  height: 132px;
+  width: 198px;
+  height: 198px;
 }
 .section-title > .illustrated-heading {
   flex: 1 1 220px;
 }
 .metric-mascot {
-  width: 54px;
-  height: 54px;
+  width: 81px;
+  height: 81px;
   float: right;
   margin: -5px -5px 4px 8px;
 }
 .agent-mascot {
-  width: 36px;
-  height: 36px;
+  width: 54px;
+  height: 54px;
+}
+.agent-icon:has(> .agent-mascot) {
+  flex: 0 0 54px;
+  width: 54px;
+  height: 54px;
+}
+.metric-mascot ~ .metric-value {
+  clear: both;
 }
 .robot-editorial-note {
   color: #8a9ca7;
@@ -1222,27 +1232,32 @@ fieldset {
 }
 @media (max-width: 700px) {
   .section-mascot {
-    width: 66px;
-    height: 66px;
+    width: 99px;
+    height: 99px;
   }
   .illustrated-heading {
     gap: 12px;
   }
   .illustrated-heading-featured {
-    min-height: 106px;
+    min-height: 155px;
     gap: 14px;
   }
   .illustrated-heading-featured .section-mascot {
-    width: 98px;
-    height: 98px;
+    width: 147px;
+    height: 147px;
   }
   .metric-mascot {
-    width: 44px;
-    height: 44px;
+    width: 66px;
+    height: 66px;
   }
   .agent-mascot {
-    width: 32px;
-    height: 32px;
+    width: 48px;
+    height: 48px;
+  }
+  .agent-icon:has(> .agent-mascot) {
+    flex-basis: 48px;
+    width: 48px;
+    height: 48px;
   }
 }
 .brand-finding {
@@ -1292,7 +1307,8 @@ fieldset {
 .social-hub { overflow: hidden; }
 .social-channel-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 12px; margin-top: 24px; }
 .social-channel { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 18px; border: 1px solid #ffffff14; border-radius: 18px; background: linear-gradient(155deg,#273b4d55,#17202b80); }
-.social-mark { display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px; background: #101722; border: 1px solid #ffffff14; border-radius: 12px; font-size: 24px; font-weight: 700; }
+.social-mark { display: grid; place-items: center; flex: 0 0 48px; width: 48px; height: 48px; }
+.social-mark img { display: block; width: 32px; height: 32px; object-fit: contain; }
 .social-channel h3 { font-size: 15px; }
 .social-channel-detail { min-height: 54px; }
 .social-channel .pill { align-self: flex-start; font-size: 10px; }
@@ -1307,7 +1323,7 @@ fieldset {
 .planner-controls { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
 .planner-controls label { flex: 1; min-width: 170px; }
 .posting-planner { min-width: 0; }
-.posting-planner .section-mascot { width: 58px; height: 58px; }
+.posting-planner .section-mascot { width: 87px; height: 87px; }
 .posting-days { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 8px; margin: 20px 0; }
 .posting-day { min-width: 0; display: flex; flex-direction: column; gap: 12px; padding: 14px 10px; background: #ffffff04; border: 1px solid #ffffff12; border-radius: 14px; }
 .posting-day > div:first-child { display: flex; flex-direction: column; gap: 4px; }

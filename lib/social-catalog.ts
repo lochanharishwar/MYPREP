@@ -5,8 +5,7 @@ export const socialCatalog: Record<
   Platform,
   {
     name: string;
-    mark: string;
-    color: string;
+    logo: string;
     formats: string;
     permission: string;
     requirement: string;
@@ -17,8 +16,7 @@ export const socialCatalog: Record<
 > = {
   youtube: {
     name: 'YouTube',
-    mark: '▶',
-    color: '#ff7777',
+    logo: '/platforms/youtube.png',
     formats: 'Video',
     permission: 'Upload videos and read your channel performance.',
     requirement:
@@ -29,8 +27,7 @@ export const socialCatalog: Record<
   },
   x: {
     name: 'X / Twitter',
-    mark: '𝕏',
-    color: '#dce5ef',
+    logo: '/platforms/x.png',
     formats: 'Text · Image · Video',
     permission: 'Create posts, upload media and read available post metrics.',
     requirement:
@@ -41,8 +38,7 @@ export const socialCatalog: Record<
   },
   instagram: {
     name: 'Instagram',
-    mark: '◎',
-    color: '#c4a1ff',
+    logo: '/platforms/instagram.png',
     formats: 'Image · Reels',
     permission: 'Publish media and read insights and comments.',
     requirement:
@@ -53,8 +49,7 @@ export const socialCatalog: Record<
   },
   linkedin: {
     name: 'LinkedIn',
-    mark: 'in',
-    color: '#80b6ff',
+    logo: '/platforms/linkedin.svg',
     formats: 'Text · Image · Video',
     permission: 'Identify your profile and publish posts on your behalf.',
     requirement:
@@ -66,8 +61,7 @@ export const socialCatalog: Record<
   },
   reddit: {
     name: 'Reddit',
-    mark: 'r/',
-    color: '#ffac76',
+    logo: '/platforms/reddit.png',
     formats: 'Text · Media links',
     permission: 'Read your profile, submit posts and read their feedback.',
     requirement:

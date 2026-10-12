@@ -84,8 +84,8 @@ export function SocialConnections() {
           return (
             <article className="social-channel" key={platform}>
               <div className="row">
-                <span className="social-mark" style={{ color: item.color }}>
-                  {item.mark}
+                <span className="social-mark" aria-hidden="true">
+                  <img src={item.logo} alt="" width={32} height={32} />
                 </span>
                 <div>
                   <h3>{item.name}</h3>
