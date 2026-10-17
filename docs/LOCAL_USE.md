@@ -27,6 +27,8 @@ Choose formats and destinations, supply the creative brief, and optionally give 
 
 The image adapter uses Google's documented native Gemini image API. Default model: `gemini-3-pro-image`; change the model identifier in server configuration when needed. See [Google image generation](https://ai.google.dev/gemini-api/docs/image-generation).
 
+The supplied Gemini key is configured outside source control in this checkout's ignored `.env.local` and as a secret in Sites. The model-list request succeeded for `gemini-3-pro-image`; this was not a paid image-generation test. Keep the existing `.env.local` when updating configuration. Positive cost estimates and owner-selected workspace/campaign limits are still required locally. The public browser workspace deliberately does not dispatch paid jobs until the secure server workspace enforces spending limits. The provider status distinguishes a configured key from this activation requirement.
+
 ## Social posting and analytics
 
 Logging into BrandCurrent is not needed for local drafting. Authorizing the social platform is required for posting to that account. No passwords or public/shared API keys can replace that authorization.

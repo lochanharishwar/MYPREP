@@ -1,10 +1,173 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { Clock3, ArrowUpRight } from 'lucide-react';
+import {
+  Clock3,
+  ArrowUpRight,
+  Check,
+  ChevronRight,
+  FlaskConical,
+  Globe2,
+  History,
+  UsersRound,
+} from 'lucide-react';
 import { postingSuggestions } from '@/lib/timing';
+import { socialCatalog } from '@/lib/social-catalog';
 import type { Entity, MetricObservation, ScheduledPost } from '@/lib/contracts';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 import { useWorkspace } from './workspace-provider';
 import { SectionHeading } from './section-heading';
+
+const planningTimezones = [
+  {
+    value: 'Asia/Kolkata',
+    label: 'Kolkata, India',
+    detail: 'India Standard Time',
+  },
+  {
+    value: 'UTC',
+    label: 'Coordinated Universal Time',
+    detail: 'UTC · No daylight saving',
+  },
+  { value: 'America/New_York', label: 'New York', detail: 'Eastern Time' },
+  {
+    value: 'America/Los_Angeles',
+    label: 'Los Angeles',
+    detail: 'Pacific Time',
+  },
+  { value: 'Europe/London', label: 'London', detail: 'United Kingdom' },
+  { value: 'Europe/Berlin', label: 'Berlin', detail: 'Central European Time' },
+  {
+    value: 'Asia/Singapore',
+    label: 'Singapore',
+    detail: 'Singapore Standard Time',
+  },
+  {
+    value: 'Australia/Sydney',
+    label: 'Sydney',
+    detail: 'Australian Eastern Time',
+  },
+];
+
+export function PlanningControls({
+  accounts,
+  accountId,
+  timezone,
+  onAccountChange,
+  onTimezoneChange,
+}: {
+  accounts: Entity<{ name: string; platform: string; status: string }>[];
+  accountId: string;
+  timezone: string;
+  onAccountChange: (value: string) => void;
+  onTimezoneChange: (value: string) => void;
+}) {
+  const account = accounts.find((item) => item.id === accountId);
+  const zone = planningTimezones.find((item) => item.value === timezone);
+  const platformName = (platform: string) =>
+    socialCatalog[platform as keyof typeof socialCatalog]?.name ?? platform;
+  return (
+    <div className="planner-controls">
+      <div className="planner-control">
+        <span className="planner-control-label">Account</span>
+        <Select
+          value={accountId}
+          onValueChange={(value) => onAccountChange(value ?? '')}
+        >
+          <SelectTrigger
+            aria-label="Planning account"
+            className="planner-select-trigger"
+          >
+            <span className="planner-control-icon">
+              <UsersRound size={19} aria-hidden="true" />
+            </span>
+            <SelectValue>
+              <span className="planner-select-copy">
+                <strong>{account?.payload.name ?? 'Choose an account'}</strong>
+                <span>
+                  {account
+                    ? platformName(account.payload.platform)
+                    : 'Explore times for your audience'}
+                </span>
+              </span>
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent
+            className="planner-select-menu"
+            alignItemWithTrigger={false}
+          >
+            <SelectItem value="">
+              <span className="planner-option-copy">
+                <strong>General experiment plan</strong>
+                <span>Explore without an account</span>
+              </span>
+            </SelectItem>
+            {accounts.map((item) => (
+              <SelectItem key={item.id} value={item.id}>
+                <span className="planner-option-copy">
+                  <strong>{item.payload.name}</strong>
+                  <span>
+                    {platformName(item.payload.platform)} ·{' '}
+                    {item.payload.status === 'connected'
+                      ? 'Connected'
+                      : 'Reconnect to publish'}
+                  </span>
+                </span>
+              </SelectItem>
+            ))}
+            {!accounts.length && (
+              <p className="planner-menu-note">
+                Connect a channel above to use its posting history.
+              </p>
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="planner-control">
+        <span className="planner-control-label">Timezone</span>
+        <Select
+          value={timezone}
+          onValueChange={(value) => {
+            if (value) onTimezoneChange(value);
+          }}
+        >
+          <SelectTrigger
+            aria-label="Planning timezone"
+            className="planner-select-trigger"
+          >
+            <span className="planner-control-icon">
+              <Globe2 size={19} aria-hidden="true" />
+            </span>
+            <SelectValue>
+              <span className="planner-select-copy">
+                <strong>{zone?.label ?? timezone}</strong>
+                <span>{zone?.detail ?? timezone}</span>
+              </span>
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent
+            className="planner-select-menu"
+            alignItemWithTrigger={false}
+          >
+            {planningTimezones.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                <span className="planner-option-copy">
+                  <strong>{item.label}</strong>
+                  <span>{item.detail}</span>
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
 
 export function PostingPlanner({
   accountId,
@@ -96,18 +259,33 @@ export function PostingPlanner({
   const history = result.days.some((d) => !d.experimental);
   return (
     <section className="posting-planner" aria-label="Posting time suggestions">
-      <div className="section-title">
+      <div className="section-title posting-planner-heading">
         <div>
           <SectionHeading character="schedule" as="h3">
             Find your next posting window
           </SectionHeading>
-          <p className="small muted">Next seven days · {timezone}</p>
+          <p className="posting-planner-subtitle">
+            <Clock3 size={13} aria-hidden="true" /> Next seven days ·{' '}
+            {planningTimezones.find((zone) => zone.value === timezone)?.label ??
+              timezone}
+          </p>
         </div>
-        <span className={`pill ${history ? 'green' : 'amber'}`}>
-          {history ? 'Account history' : 'Experiment plan'}
+        <span
+          className={`pill posting-plan-basis ${history ? 'green' : 'amber'}`}
+        >
+          {history ? (
+            <History size={13} aria-hidden="true" />
+          ) : (
+            <FlaskConical size={13} aria-hidden="true" />
+          )}
+          {loadingHistory
+            ? 'Checking history'
+            : history
+              ? 'Account history'
+              : 'Experiment plan'}
         </span>
       </div>
-      <p className="small muted">
+      <p className="small muted posting-plan-explanation">
         {history
           ? 'Ranked by median performance 24–48 hours after publication, using this account’s last 90 days. Each hour needs three posts on separate dates.'
           : 'No reliable timing pattern yet. Try morning, lunchtime and evening, then compare the results. These are planning choices, not platform-endorsed best times.'}
@@ -135,8 +313,11 @@ export function PostingPlanner({
       )}
       <div className="posting-days">
         {result.days.map((day) => (
-          <article className="posting-day" key={day.date}>
-            <div>
+          <article
+            className={`posting-day ${day.slots.some((slot) => selectedTime === slot.localTime) ? 'has-selection' : ''}`}
+            key={day.date}
+          >
+            <div className="posting-day-heading">
               <strong>
                 {new Intl.DateTimeFormat('en', {
                   weekday: 'short',
@@ -150,6 +331,7 @@ export function PostingPlanner({
                   timeZone: 'UTC',
                 }).format(new Date(day.date + 'T12:00:00Z'))}
               </span>
+              <span className="posting-day-marker" aria-hidden="true" />
             </div>
             <div className="posting-slots">
               {day.slots.map((slot, i) => (
@@ -157,6 +339,7 @@ export function PostingPlanner({
                   type="button"
                   className={`posting-slot ${selectedTime === slot.localTime ? 'selected' : ''}`}
                   aria-pressed={selectedTime === slot.localTime}
+                  aria-label={`${new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(new Date(day.date + 'T12:00:00Z'))}, ${slot.localTime.slice(11)}, ${timezone}${i === 0 && !day.experimental ? ', top observed window' : ''}`}
                   key={slot.utc}
                   onClick={() => {
                     if (Date.parse(slot.utc) <= Date.now() + 600000) {
@@ -169,8 +352,12 @@ export function PostingPlanner({
                     onChoose(slot.localTime);
                   }}
                 >
-                  <Clock3 size={13} />
-                  {slot.localTime.slice(11)}
+                  {selectedTime === slot.localTime ? (
+                    <Check size={13} aria-hidden="true" />
+                  ) : (
+                    <Clock3 size={13} aria-hidden="true" />
+                  )}
+                  <span>{slot.localTime.slice(11)}</span>
                   {i === 0 && !day.experimental && (
                     <span className="small">Top observed</span>
                   )}
@@ -180,7 +367,7 @@ export function PostingPlanner({
                 <span className="small muted">Today’s windows have passed</span>
               )}
             </div>
-            <span className="small muted">
+            <span className="posting-day-basis">
               {day.basis === 'weekday'
                 ? 'Same weekday'
                 : day.basis === 'account'
@@ -217,7 +404,10 @@ export function PostingPlanner({
         ))}
       </div>
       <details className="timing-method">
-        <summary>How to use these suggestions</summary>
+        <summary>
+          <span>How these windows are chosen</span>
+          <ChevronRight size={15} aria-hidden="true" />
+        </summary>
         <p className="small muted">
           Click a time to fill the schedule. Suggestions identify hourly
           windows; minute-level precision is not a prediction. Use the same

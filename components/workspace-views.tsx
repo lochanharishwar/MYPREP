@@ -7,6 +7,7 @@ import { isUnverifiedDNA } from '@/lib/brand-report';
 /* oxlint-disable typescript/no-deprecated */
 import { useState } from 'react';
 import { BrandGovernance } from './brand-governance';
+import { BrandIdentitySummary } from './brand-identity';
 import { PageInsights } from './page-insights';
 import { ConfirmAction } from './confirm-action';
 import { PublicationResolution } from './publication-resolution';
@@ -84,11 +85,12 @@ import type {
   Finding,
 } from '@/lib/contracts';
 import { platforms } from '@/lib/contracts';
+import { socialCatalog } from '@/lib/social-catalog';
 import { Empty } from './marketing-app';
 import { ContentMedia } from './content-media';
 import { useReport, ReportControls } from './report-controls';
 import { SocialConnections } from './social-connections';
-import { PostingPlanner } from './posting-planner';
+import { PlanningControls, PostingPlanner } from './posting-planner';
 import {
   EvidenceDetails,
   CustomerJourney,
@@ -196,7 +198,9 @@ export function DNACard({ compact = false }: { compact?: boolean }) {
     [tagline, setTagline] = useState('');
   if (!record)
     return (
-      <section className="panel">
+      <section
+        className={`panel brand-dna-card${compact ? ' brand-dna-card-compact' : ''}`}
+      >
         <div className="section-title">
           <SectionHeading character="identity">Your Brand DNA</SectionHeading>
           <span className="pill">Awaiting your website</span>
@@ -224,7 +228,9 @@ export function DNACard({ compact = false }: { compact?: boolean }) {
   const dna = record.payload;
   const unverified = isUnverifiedDNA(dna);
   return (
-    <section className="panel">
+    <section
+      className={`panel brand-dna-card${compact ? ' brand-dna-card-compact' : ''}`}
+    >
       <div className="section-title">
         <SectionHeading character="identity">Your Brand DNA</SectionHeading>
         <span
@@ -260,24 +266,7 @@ export function DNACard({ compact = false }: { compact?: boolean }) {
           </button>
         </div>
       )}
-      <div className="row">
-        {dna.logo && /^https?:/.test(dna.logo) ? (
-          <img
-            src={dna.logo}
-            alt={`${dna.name ?? 'Brand'} logo`}
-            className="brand-logo"
-          />
-        ) : (
-          <Dna size={38} />
-        )}
-        <div>
-          <h2>{dna.name ?? w.brand?.name}</h2>
-          <p className="muted">
-            {dna.tagline ??
-              'No explicit slogan found in the sampled pages. You can add a correction below.'}
-          </p>
-        </div>
-      </div>
+      <BrandIdentitySummary dna={dna} fallbackName={w.brand?.name} />
       <div className="spaced">
         {dna.overview.map((f, i) => (
           <div key={i} className="spaced">
@@ -309,8 +298,8 @@ export function DNACard({ compact = false }: { compact?: boolean }) {
         </details>
       )}
       {!!dna.palette.length && (
-        <p className="muted small spaced">
-          Observed primary / brand CSS declarations
+        <p className="muted small spaced dna-observed-palette">
+          Observed palette · CSS candidates
         </p>
       )}
       <div className="swatches spaced">
@@ -326,7 +315,7 @@ export function DNACard({ compact = false }: { compact?: boolean }) {
           <span key={font}>{font}</span>
         ))}
       </div>
-      <div className="row spaced">
+      <div className="row spaced dna-card-actions">
         {compact ? (
           <Link href="/brand-dna" className="subtle-link">
             Explore Brand DNA <ArrowRight size={15} />
@@ -654,14 +643,17 @@ export function ContentView() {
     <div className="stack content-studio">
       <section className="panel glass studio-compose">
         <ActivationNotice feature="generation" />
-        <div className="section-title">
+        <div className="section-title studio-heading">
           <div>
             <span className="eyebrow">CAMPAIGN STUDIO</span>
             <SectionHeading character="campaign">
               Create a campaign
             </SectionHeading>
           </div>
-          <Sparkles size={25} />
+          <div className="studio-heading-note">
+            <Sparkles size={15} aria-hidden="true" />
+            <span>Your brand. A new idea.</span>
+          </div>
         </div>
         <form
           onSubmit={(e) => {
@@ -691,8 +683,14 @@ export function ContentView() {
         >
           <div className="studio-columns">
             <div className="studio-brief">
-              <div className="field">
-                <label htmlFor="campaign-idea">What are we creating?</label>
+              <div className="field studio-idea-field">
+                <div className="studio-step-title">
+                  <span className="studio-step-number" aria-hidden="true">
+                    01
+                  </span>
+                  <label htmlFor="campaign-idea">Shape the idea</label>
+                  <span className="studio-required">Required</span>
+                </div>
                 <textarea
                   id="campaign-idea"
                   required
@@ -701,12 +699,21 @@ export function ContentView() {
                   placeholder="Launch a product, tell a story, or share an offer…"
                   value={idea}
                   onChange={(e) => setIdea(e.target.value)}
+                  aria-describedby="campaign-idea-hint"
                 />
+                <p id="campaign-idea-hint" className="studio-field-hint">
+                  A clear goal, a key message, and a reason to care.
+                </p>
               </div>
               <fieldset className="studio-formats">
                 <legend>
-                  Format{' '}
-                  <span className="muted small">· choose at least one</span>
+                  <span className="studio-step-title">
+                    <span className="studio-step-number" aria-hidden="true">
+                      02
+                    </span>
+                    Choose your formats
+                    <span className="studio-required">Select one or more</span>
+                  </span>
                 </legend>
                 <div className="studio-format-grid">
                   {[
@@ -733,8 +740,10 @@ export function ContentView() {
                       className={`format-option studio-format ${formats.includes(f.id) ? 'checked' : ''} ${w.localMode && f.id === 'video' ? 'unavailable' : ''}`}
                       key={f.id}
                     >
-                      <f.icon size={20} />
-                      <span>
+                      <span className="studio-format-icon">
+                        <f.icon size={20} aria-hidden="true" />
+                      </span>
+                      <span className="studio-format-copy">
                         <strong className="capitalize">{f.id}</strong>
                         <small>{f.description}</small>
                       </span>
@@ -751,8 +760,11 @@ export function ContentView() {
                   ))}
                 </div>
               </fieldset>
-              <label className="field">
-                Audience
+              <label className="field studio-audience">
+                <span className="studio-field-label">
+                  Who is it for?{' '}
+                  <span className="studio-optional">Optional</span>
+                </span>
                 <input
                   value={audience}
                   onChange={(e) => setAudience(e.target.value)}
@@ -761,7 +773,8 @@ export function ContentView() {
               </label>
               <details className="studio-advanced">
                 <summary>
-                  Creative details <span className="muted small">Optional</span>
+                  Creative details{' '}
+                  <span className="muted small">Add context & direction</span>
                 </summary>
                 <div className="form-grid">
                   <label className="field">
@@ -801,8 +814,16 @@ export function ContentView() {
               </details>
             </div>
             <aside className="studio-delivery">
+              <div className="studio-step-title studio-delivery-title">
+                <span className="studio-step-number" aria-hidden="true">
+                  03
+                </span>
+                <h3>Set the delivery</h3>
+              </div>
               <div className="studio-brand">
-                <Dna size={18} />
+                <span className="studio-brand-icon">
+                  <Dna size={19} aria-hidden="true" />
+                </span>
                 <div>
                   <span className="muted small">Brand source</span>
                   <strong>
@@ -819,49 +840,74 @@ export function ContentView() {
               </div>
               <fieldset>
                 <legend>
-                  Platforms <span className="muted small">· required</span>
+                  <span className="studio-field-label">
+                    Target platforms{' '}
+                    <span className="studio-required">Required</span>
+                  </span>
                 </legend>
                 <div className="studio-platforms">
                   {platforms.map((p) => (
                     <label
                       key={p}
-                      className={`studio-platform ${targets.includes(p) ? 'checked' : ''}`}
+                      className={`studio-platform ${targets.includes(p) ? 'checked' : ''} ${w.localMode && p === 'youtube' ? 'unavailable' : ''}`}
+                      title={
+                        w.localMode && p === 'youtube'
+                          ? 'YouTube requires the server video workflow'
+                          : undefined
+                      }
                     >
+                      <img
+                        className={`studio-platform-logo studio-platform-logo-${p}`}
+                        src={socialCatalog[p].logo}
+                        width={20}
+                        height={20}
+                        alt=""
+                        aria-hidden="true"
+                      />
+                      <span>{p === 'x' ? 'X' : socialCatalog[p].name}</span>
                       <Checkbox
-                        aria-label={p}
+                        aria-label={socialCatalog[p].name}
                         disabled={w.localMode && p === 'youtube'}
                         checked={targets.includes(p)}
                         onCheckedChange={() => toggle(targets, p, setTargets)}
                       />
-                      <span className="capitalize">
-                        {p === 'youtube'
-                          ? 'YouTube'
-                          : p === 'linkedin'
-                            ? 'LinkedIn'
-                            : p === 'x'
-                              ? 'X'
-                              : p}
-                      </span>
                     </label>
                   ))}
                 </div>
+                {w.localMode && (
+                  <p className="studio-field-hint">
+                    YouTube becomes available with video setup.
+                  </p>
+                )}
               </fieldset>
-              <label className="field">
-                Campaign limit <span className="muted small">USD</span>
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  required
-                  value={budget}
-                  onChange={(e) => setBudget(e.target.value)}
-                  placeholder="Maximum spend"
-                />
+              <label className="field studio-budget">
+                <span className="studio-field-label">
+                  Campaign limit <span className="studio-optional">USD</span>
+                </span>
+                <span className="studio-budget-input">
+                  <span aria-hidden="true">$</span>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    required
+                    value={budget}
+                    onChange={(e) => setBudget(e.target.value)}
+                    placeholder="0.00"
+                    aria-describedby="campaign-budget-hint"
+                  />
+                </span>
+                <span id="campaign-budget-hint" className="studio-field-hint">
+                  Your maximum spend for this campaign.
+                </span>
               </label>
               <p className="muted small studio-review-note">
-                <ShieldCheck size={16} />
-                Up to 5 attempts. Only results scoring 8.7/10 or higher reach
-                your gallery.
+                <ShieldCheck size={17} aria-hidden="true" />
+                <span>
+                  <strong>Reviewed before your gallery</strong>
+                  Up to 5 attempts. Only results scoring 8.7/10 or higher
+                  appear.
+                </span>
               </p>
               <button
                 className="primary-btn studio-generate"
@@ -869,8 +915,12 @@ export function ContentView() {
               >
                 <Sparkles size={16} />
                 {w.busy ? 'Generating and reviewing…' : 'Generate content'}
+                {!w.busy && <ArrowRight size={16} aria-hidden="true" />}
               </button>
-              <p className="muted small">
+              <p
+                className="muted small studio-selection-summary"
+                aria-live="polite"
+              >
                 {formats.length} {formats.length === 1 ? 'format' : 'formats'} ·{' '}
                 {targets.length}{' '}
                 {targets.length === 1 ? 'platform' : 'platforms'} selected
@@ -1113,13 +1163,29 @@ export function ScheduleView() {
     [localTime, setLocalTime] = useState(''),
     [timezone, setTimezone] = useState('Asia/Kolkata');
   const [month, setMonth] = useState(new Date());
-  const [planningAccount, setPlanningAccount] = useState('');
-  const [plannedTime, setPlannedTime] = useState('');
+  const planningScope = `${w.workspaceId}:${w.session?.user.id ?? ''}:${w.brandId}`;
+  const [planning, setPlanning] = useState({
+    scope: planningScope,
+    accountId: '',
+    time: '',
+    timezone: 'Asia/Kolkata',
+  });
   const accounts = w.records<{
     name: string;
     platform: string;
     status: string;
   }>('connection');
+  const planningAccount =
+    planning.scope === planningScope &&
+    accounts.some((account) => account.id === planning.accountId)
+      ? planning.accountId
+      : '';
+  const plannedTime =
+    planning.scope === planningScope && planning.accountId === planningAccount
+      ? planning.time
+      : '';
+  const planningTimezone =
+    planning.scope === planningScope ? planning.timezone : 'Asia/Kolkata';
   const unscheduled = approvals.filter(
     (a) =>
       !posts.some(
@@ -1181,48 +1247,38 @@ export function ScheduleView() {
       </div>
       <SocialConnections />
       <section className="panel schedule-planning">
-        <div className="planner-controls">
-          <label className="field">
-            Account
-            <select
-              value={planningAccount}
-              onChange={(e) => setPlanningAccount(e.target.value)}
-            >
-              <option value="">Choose an account</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.payload.name} · {a.payload.platform}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            Timezone
-            <select
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-            >
-              {[
-                'Asia/Kolkata',
-                'UTC',
-                'America/New_York',
-                'America/Los_Angeles',
-                'Europe/London',
-                'Europe/Berlin',
-                'Asia/Singapore',
-                'Australia/Sydney',
-              ].map((tz) => (
-                <option key={tz}>{tz}</option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <PlanningControls
+          accounts={accounts}
+          accountId={planningAccount}
+          timezone={planningTimezone}
+          onAccountChange={(accountId) =>
+            setPlanning({
+              scope: planningScope,
+              accountId,
+              time: '',
+              timezone: planningTimezone,
+            })
+          }
+          onTimezoneChange={(nextTimezone) =>
+            setPlanning({
+              scope: planningScope,
+              accountId: planningAccount,
+              time: '',
+              timezone: nextTimezone,
+            })
+          }
+        />
         <PostingPlanner
           accountId={planningAccount}
-          timezone={timezone}
+          timezone={planningTimezone}
           selectedTime={plannedTime}
           onChoose={(time) => {
-            setPlannedTime(time);
+            setPlanning({
+              scope: planningScope,
+              accountId: planningAccount,
+              time,
+              timezone: planningTimezone,
+            });
             if (!w.localMode && unscheduled.length) {
               const suggested = unscheduled.find(
                 (a) => a.payload.accountId === planningAccount,
@@ -1230,17 +1286,18 @@ export function ScheduleView() {
               setEditing(null);
               setApproval(suggested?.id ?? '');
               setLocalTime(time);
+              setTimezone(planningTimezone);
               setModal(true);
             }
           }}
         />
         {plannedTime && (
-          <p className="notice small" role="status">
-            Selected: {plannedTime.replace('T', ' ')} · {timezone}.
+          <output className="notice small planning-selection">
+            Selected: {plannedTime.replace('T', ' ')} · {planningTimezone}.
             {w.localMode
               ? ' This is a planning selection. Activate account connections and background publishing to schedule automatically.'
               : ' Choose an approved version to save this schedule.'}
-          </p>
+          </output>
         )}
       </section>
       <section className="panel">

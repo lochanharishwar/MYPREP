@@ -38,7 +38,10 @@ export const serviceStatus = () => [
     name: 'Generation & review',
     ready: !!env('GEMINI_API_KEY'),
     detail: env('GEMINI_API_KEY')
-      ? 'Model key configured; actual model access and quota are checked on each request.'
+      ? process.env.NODE_ENV === 'production' &&
+        env('BROWSER_WORKSPACE_MODE') === 'sites'
+        ? 'Gemini key configured. Paid creation on this public site requires the secure server workspace and enforced spending limits. Localhost can use the configured provider with local limits.'
+        : 'Gemini key configured; set job cost estimates and workspace limits before creation. Model access and quota are checked on each request.'
       : 'Missing GEMINI_API_KEY on the server. Use your Google AI Studio key; no image generation is available until configured.',
   },
   {

@@ -1,6 +1,13 @@
 import { env, serviceStatus } from '@/lib/server/env';
 export const dynamic = 'force-dynamic';
 export async function GET() {
+  const providerConfigured = !!env('GEMINI_API_KEY');
+  const hosted = process.env.NODE_ENV === 'production';
+  const generationReason = !providerConfigured
+    ? 'Add your Gemini API key to the server to enable image and text creation.'
+    : hosted
+      ? 'Gemini is configured. Paid creation on this public site needs the secure server workspace and enforced spending limits. You can use your configured Gemini provider on localhost.'
+      : 'Gemini is configured. Set positive job cost estimates on the server and a monthly limit in Workspace settings before starting paid creation.';
   return Response.json(
     {
       workspaceMode:
@@ -15,7 +22,9 @@ export async function GET() {
         process.env.NODE_ENV !== 'production' ||
         env('BROWSER_WORKSPACE_MODE') === 'sites',
       generation: {
-        ready: process.env.NODE_ENV !== 'production' && !!env('GEMINI_API_KEY'),
+        ready: !hosted && providerConfigured,
+        providerConfigured,
+        reason: generationReason,
         textCost: Number(env('COST_TEXT')),
         imageCost: Number(env('COST_IMAGE')),
         model: env('GEMINI_TEXT_MODEL', 'gemini-2.5-pro'),

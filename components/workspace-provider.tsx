@@ -707,6 +707,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const config = (await fetch('/api/config').then((r) => r.json())) as {
         generation: {
           ready: boolean;
+          reason?: string;
           textCost: number;
           imageCost: number;
           model: string;
@@ -716,7 +717,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       };
       if (!config.generation?.ready)
         throw new Error(
-          'Image and text creation need your Gemini API key on the server. Open Connections for setup; no image has been generated.',
+          config.generation?.reason ??
+            'Image creation is not available yet. Open Connections to check the provider setup.',
         );
       if (!workspace.monthly_limit)
         throw new Error(

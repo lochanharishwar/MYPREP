@@ -7,6 +7,9 @@ export function ActivationNotice({
 }) {
   const w = useWorkspace();
   if (!w.localMode) return null;
+  const generationService = w.state.services.find(
+    (service) => service.name === 'Generation & review',
+  );
   const text = {
     generation:
       'Image and text creation require your Gemini key and cost estimates on the local server. Set a monthly limit in Workspace settings. Keep this tab open until the run finishes. Video requires the server media workflow.',
@@ -21,11 +24,14 @@ export function ActivationNotice({
     return (
       <details className="studio-setup">
         <summary>
-          {w.state.services.find((s) => s.name === 'Generation & review')?.ready
+          {generationService?.ready
             ? 'Generation settings'
             : 'Generation provider needs setup'}{' '}
           <span className="muted small">Provider and spending limits</span>
         </summary>
+        {generationService?.ready && (
+          <p className="muted small">{generationService.detail}</p>
+        )}
         <p className="muted small">{text}</p>
         <button
           type="button"
