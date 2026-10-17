@@ -41,7 +41,7 @@ export const serviceStatus = () => [
       ? process.env.NODE_ENV === 'production' &&
         env('BROWSER_WORKSPACE_MODE') === 'sites'
         ? 'Gemini key configured. Paid creation on this public site requires the secure server workspace and enforced spending limits. Localhost can use the configured provider with local limits.'
-        : 'Gemini key configured; set job cost estimates and workspace limits before creation. Model access and quota are checked on each request.'
+        : 'Gemini key configured. Local default models include conservative cost estimates; set your workspace and campaign limits before creation. Model access and quota are checked on each request.'
       : 'Missing GEMINI_API_KEY on the server. Use your Google AI Studio key; no image generation is available until configured.',
   },
   {

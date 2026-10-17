@@ -1,5 +1,10 @@
 'use client';
 import { ActivationNotice } from './activation-notice';
+import {
+  GenerationReadiness,
+  useGenerationReadiness,
+} from './generation-readiness';
+import { localCampaignReserve } from '@/lib/local-generation';
 import { isUnverifiedDNA } from '@/lib/brand-report';
 // Evidence and signed private storage URLs must bypass image optimization.
 /* oxlint-disable next/no-img-element */
@@ -603,6 +608,7 @@ export function BrandView() {
 }
 export function ContentView() {
   const w = useWorkspace();
+  const generation = useGenerationReadiness(w.localMode);
   const [approvalStage, setApprovalStage] = useState('brand');
   const [idea, setIdea] = useState(''),
     [formats, setFormats] = useState<string[]>([]),
@@ -639,6 +645,18 @@ export function ContentView() {
   }>('connection');
   const toggle = (arr: string[], v: string, set: (a: string[]) => void) =>
     set(arr.includes(v) ? arr.filter((s) => s !== v) : [...arr, v]);
+  const reservation = generation.config
+    ? localCampaignReserve(targets, formats, generation.config)
+    : null;
+  const monthlyLimit = w.state.workspace?.monthly_limit ?? 0;
+  const localBlocked =
+    w.localMode &&
+    (!generation.config?.ready ||
+      !reservation ||
+      monthlyLimit <= 0 ||
+      !w.records<BrandDNA>('dna').length ||
+      !Number.isFinite(Number(budget)) ||
+      Number(budget) <= 0);
   return (
     <div className="stack content-studio">
       <section className="panel glass studio-compose">
@@ -909,9 +927,20 @@ export function ContentView() {
                   appear.
                 </span>
               </p>
+              {w.localMode && (
+                <GenerationReadiness
+                  setup={generation}
+                  platforms={targets}
+                  formats={formats}
+                  monthlyLimit={monthlyLimit}
+                  onSettings={() => w.setSettings(true)}
+                />
+              )}
               <button
                 className="primary-btn studio-generate"
-                disabled={w.busy || !formats.length || !targets.length}
+                disabled={
+                  w.busy || !formats.length || !targets.length || localBlocked
+                }
               >
                 <Sparkles size={16} />
                 {w.busy ? 'Generating and reviewing…' : 'Generate content'}

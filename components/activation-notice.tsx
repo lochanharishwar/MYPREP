@@ -12,7 +12,7 @@ export function ActivationNotice({
   );
   const text = {
     generation:
-      'Image and text creation require your Gemini key and cost estimates on the local server. Set a monthly limit in Workspace settings. Keep this tab open until the run finishes. Video requires the server media workflow.',
+      'Local image and text creation use conservative built-in reservations for the default Gemini models. Set your monthly and campaign limits, then keep this tab open until the run finishes. Custom models need explicit cost estimates. Video requires the server media workflow.',
     publishing:
       'Unattended posting requires the server workspace, a running Inngest worker, and an authorized social account. Local browser storage cannot publish after this tab closes. Once those services are configured, connect an account, approve a version, and select its date and time.',
     analytics:

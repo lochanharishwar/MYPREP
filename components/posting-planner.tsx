@@ -193,7 +193,7 @@ export function PostingPlanner({
     key: string;
     message: string;
   } | null>(null);
-  const { read, brandId, workspaceId, localMode, session } = w;
+  const { read, records, brandId, workspaceId, localMode, session } = w;
   const historyKey = `${workspaceId}:${session?.user.id ?? ''}:${brandId}:${accountId}:${Math.floor(now / 300000)}`;
   useEffect(() => {
     const update = () => setNow(Date.now());
@@ -237,13 +237,13 @@ export function PostingPlanner({
   const failure = historyError?.key === historyKey ? historyError.message : '';
   const loadingHistory =
     !localMode && !!accountId && !!session && !remote && !failure;
-  const posts = localMode
-      ? w.records<ScheduledPost>('schedule')
-      : (remote?.posts ?? []),
-    observations = localMode
-      ? w.records<MetricObservation>('metrics')
-      : (remote?.observations ?? []);
   const result = useMemo(() => {
+    const posts = localMode
+        ? records<ScheduledPost>('schedule')
+        : (remote?.posts ?? []),
+      observations = localMode
+        ? records<MetricObservation>('metrics')
+        : (remote?.observations ?? []);
     try {
       return {
         days: postingSuggestions(posts, observations, accountId, timezone, now),
@@ -255,7 +255,7 @@ export function PostingPlanner({
         error: 'Choose a valid timezone, such as Asia/Kolkata.',
       };
     }
-  }, [posts, observations, accountId, timezone, now]);
+  }, [localMode, records, remote, accountId, timezone, now]);
   const history = result.days.some((d) => !d.experimental);
   return (
     <section className="posting-planner" aria-label="Posting time suggestions">
@@ -296,9 +296,9 @@ export function PostingPlanner({
         </p>
       )}
       {loadingHistory && (
-        <p className="small muted" role="status">
+        <output className="small muted" style={{ display: 'block' }}>
           Loading this account’s published-post history…
-        </p>
+        </output>
       )}
       {failure && (
         <p className="notice small" role="alert">

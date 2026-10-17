@@ -111,7 +111,7 @@ export async function reviewDraft(
     generationModel: 'human-caption-edit',
     reviewModel: env(
       'GEMINI_REVIEW_MODEL',
-      env('GEMINI_TEXT_MODEL', 'gemini-2.5-pro'),
+      env('GEMINI_TEXT_MODEL', 'gemini-3.1-pro-preview'),
     ),
     dnaVersion: dna.payload.version,
   };

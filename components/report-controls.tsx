@@ -131,10 +131,10 @@ export function ReportControls({
           </span>
         </div>
         <div className="report-period-actions">
-          <div
+          <fieldset
             className="report-presets"
-            role="group"
             aria-label="Quick reporting periods"
+            style={{ margin: 0 }}
           >
             {presets.map((days) => (
               <button
@@ -146,7 +146,7 @@ export function ReportControls({
                 {days} days
               </button>
             ))}
-          </div>
+          </fieldset>
           <Popover
             open={open}
             onOpenChange={(nextOpen) => {

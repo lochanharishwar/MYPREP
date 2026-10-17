@@ -12,7 +12,7 @@ import {
   updateEntity,
   rpc,
 } from '@/lib/server/db';
-import { required } from '@/lib/server/env';
+import { env, required } from '@/lib/server/env';
 import { oauthCookie } from '@/lib/server/oauth-browser';
 import { assertRole, contentHash, parseCSV, utcFromLocal } from '@/lib/domain';
 import {
@@ -54,6 +54,7 @@ export async function POST(
             headers: { Authorization: request.headers.get('authorization')! },
           },
           auth: { persistSession: false },
+          db: { schema: env('SUPABASE_DB_SCHEMA', 'public') },
         },
       );
       if (body.accept) {

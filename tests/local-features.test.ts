@@ -214,6 +214,8 @@ describe('Real image generation contract (mocked provider transport)', () => {
           });
         if (typeof options.body !== 'string')
           throw new Error('Expected JSON request');
+        if (raw.endsWith(':countTokens'))
+          return Response.json({ totalTokens: 1200 });
         const body = JSON.parse(options.body) as GeminiBody;
         requests.push({ url: raw, body });
         if (body.generationConfig.responseModalities)

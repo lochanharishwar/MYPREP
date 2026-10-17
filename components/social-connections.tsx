@@ -1,5 +1,6 @@
 'use client';
 import { useRef, useState } from 'react';
+import Image from 'next/image';
 import {
   ArrowUpRight,
   CheckCircle2,
@@ -85,7 +86,13 @@ export function SocialConnections() {
             <article className="social-channel" key={platform}>
               <div className="row">
                 <span className="social-mark" aria-hidden="true">
-                  <img src={item.logo} alt="" width={32} height={32} />
+                  <Image
+                    src={item.logo}
+                    alt=""
+                    width={32}
+                    height={32}
+                    unoptimized
+                  />
                 </span>
                 <div>
                   <h3>{item.name}</h3>

@@ -483,6 +483,64 @@
   line-height: 1.5;
 }
 
+.generation-readiness {
+  padding: 12px;
+  border: 1px solid #85e0ec26;
+  border-radius: 10px;
+  background: #85e0ec06;
+  color: #a9bdc8;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.generation-readiness-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #b4e9e9;
+}
+.generation-readiness-heading strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+.generation-readiness-heading button {
+  margin-left: auto;
+  padding: 4px;
+}
+.generation-readiness p {
+  margin-top: 9px;
+  font-size: 11px;
+}
+.generation-readiness a,
+.generation-readiness > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  color: #a2f0dc;
+  font-size: 11px;
+}
+.generation-reservation {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-block: 12px;
+  border-block: 1px solid #ffffff0d;
+}
+.generation-reservation div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.generation-reservation dt {
+  font-size: 10px;
+}
+.generation-reservation dd {
+  color: #e0efee;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
 .content-studio .studio-setup {
   border-color: #85e0ec24;
   background: #85e0ec05;

@@ -1,13 +1,24 @@
 import { env, serviceStatus } from '@/lib/server/env';
+import { getLocalGenerationCosts } from '@/lib/generation-costs';
 export const dynamic = 'force-dynamic';
 export async function GET() {
   const providerConfigured = !!env('GEMINI_API_KEY');
   const hosted = process.env.NODE_ENV === 'production';
+  const model = env('GEMINI_TEXT_MODEL', 'gemini-3.1-pro-preview');
+  const reviewModel = env('GEMINI_REVIEW_MODEL', model);
+  const imageModel = env('GEMINI_IMAGE_MODEL', 'gemini-3-pro-image');
+  const costs = getLocalGenerationCosts({
+    textModel: model,
+    reviewModel,
+    imageModel,
+    textCost: env('COST_TEXT'),
+    imageCost: env('COST_IMAGE'),
+  });
   const generationReason = !providerConfigured
     ? 'Add your Gemini API key to the server to enable image and text creation.'
     : hosted
       ? 'Gemini is configured. Paid creation on this public site needs the secure server workspace and enforced spending limits. You can use your configured Gemini provider on localhost.'
-      : 'Gemini is configured. Set positive job cost estimates on the server and a monthly limit in Workspace settings before starting paid creation.';
+      : 'Gemini is configured. Review the displayed reservation and set your monthly and campaign limits before creating content.';
   return Response.json(
     {
       workspaceMode:
@@ -22,17 +33,13 @@ export async function GET() {
         process.env.NODE_ENV !== 'production' ||
         env('BROWSER_WORKSPACE_MODE') === 'sites',
       generation: {
+        ...costs,
         ready: !hosted && providerConfigured,
         providerConfigured,
         reason: generationReason,
-        textCost: Number(env('COST_TEXT')),
-        imageCost: Number(env('COST_IMAGE')),
-        model: env('GEMINI_TEXT_MODEL', 'gemini-2.5-pro'),
-        reviewModel: env(
-          'GEMINI_REVIEW_MODEL',
-          env('GEMINI_TEXT_MODEL', 'gemini-2.5-pro'),
-        ),
-        imageModel: env('GEMINI_IMAGE_MODEL', 'gemini-3-pro-image'),
+        model,
+        reviewModel,
+        imageModel,
       },
     },
     { headers: { 'Cache-Control': 'no-store' } },

@@ -22,6 +22,11 @@ import {
 import { contentHash, normalizeUrl } from '@/lib/domain';
 import { creativeBrandContext } from '@/lib/creative-context';
 import {
+  localAttemptReserve,
+  localGenerationPairs,
+  type LocalGenerationConfig,
+} from '@/lib/local-generation';
+import {
   loadLocalState,
   saveLocalState,
   readLocalResources,
@@ -705,22 +710,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           'Re-scan this brand. Its older profile was created by an unverified fallback.',
         );
       const config = (await fetch('/api/config').then((r) => r.json())) as {
-        generation: {
-          ready: boolean;
-          reason?: string;
-          textCost: number;
-          imageCost: number;
-          model: string;
-          reviewModel: string;
-          imageModel: string;
-        };
+        generation: LocalGenerationConfig;
       };
       if (!config.generation?.ready)
         throw new Error(
           config.generation?.reason ??
             'Image creation is not available yet. Open Connections to check the provider setup.',
         );
-      if (!workspace.monthly_limit)
+      if (
+        !Number.isFinite(workspace.monthly_limit) ||
+        workspace.monthly_limit <= 0
+      )
         throw new Error(
           'Set your monthly automation limit in Workspace settings before paid generation.',
         );
@@ -728,18 +728,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         throw new Error(
           'Video needs the media processor and durable server workflow. Choose image or text here.',
         );
-      const supported: Record<string, string[]> = {
-        instagram: ['image'],
-        youtube: [],
-        x: ['text', 'image'],
-        linkedin: ['text', 'image'],
-        reddit: ['text', 'image'],
-      };
-      const pairs = input.platforms.flatMap((platform) =>
-        input.formats
-          .filter((format) => supported[platform].includes(format))
-          .map((format) => ({ platform, format })),
-      );
+      if (!navigator.locks)
+        throw new Error(
+          'Use a current browser with Web Locks on localhost so simultaneous tabs cannot reserve the same budget.',
+        );
+      const pairs = localGenerationPairs(input.platforms, input.formats);
       if (!pairs.length)
         throw new Error(
           'No selected platform supports these formats. YouTube requires video.',
@@ -764,18 +757,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         for (const pair of pairs) {
           let feedback: string[] = [];
           for (let attempt = 1; attempt <= 5; attempt++) {
-            const estimate =
-              2 * config.generation.textCost +
-              (pair.format === 'image' ? config.generation.imageCost : 0);
-            if (
-              !Number.isFinite(config.generation.textCost) ||
-              config.generation.textCost <= 0 ||
-              (pair.format === 'image' &&
-                (!Number.isFinite(config.generation.imageCost) ||
-                  config.generation.imageCost <= 0))
-            )
+            const estimate = localAttemptReserve(
+              pair.format,
+              config.generation,
+            );
+            if (estimate === null)
               throw new Error(
-                'Configure positive conservative COST_TEXT and COST_IMAGE estimates before paid generation.',
+                config.generation.errors?.join(' ') ||
+                  'The selected model needs a valid cost estimate before generation.',
               );
             const month = new Date().toISOString().slice(0, 7);
             const prior = snapshot().state.budget;
@@ -801,13 +790,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               status: 'generating',
               attempt,
               estimatedCostUSD:
-                Number(campaign.payload.estimatedCostUSD) + estimate,
+                Math.round(
+                  (Number(campaign.payload.estimatedCostUSD) + estimate) * 100,
+                ) / 100,
             };
             save(
               {
                 ...snapshot().state,
                 budget: {
-                  reservedUSD: spent + estimate,
+                  reservedUSD: Math.round((spent + estimate) * 100) / 100,
                   estimated: true,
                   periodStart: month + '-01',
                 },

@@ -678,10 +678,10 @@ export const generationWorkflow = inngest.createFunction(
             const content: ContentVersion = {
               provenance: {
                 ...AI_VERSIONS,
-                generationModel: env('GEMINI_TEXT_MODEL', 'gemini-2.5-pro'),
+                generationModel: env('GEMINI_TEXT_MODEL', 'gemini-3.1-pro-preview'),
                 reviewModel: env(
                   'GEMINI_REVIEW_MODEL',
-                  env('GEMINI_TEXT_MODEL', 'gemini-2.5-pro'),
+                  env('GEMINI_TEXT_MODEL', 'gemini-3.1-pro-preview'),
                 ),
                 dnaVersion: dna.payload.version,
               },

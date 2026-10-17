@@ -44,7 +44,7 @@ export async function gemini<T>(
     };
     candidates?: { content: { parts: { text?: string }[] } }[];
   }>(
-    `https://generativelanguage.googleapis.com/v1beta/models/${purpose === 'review' ? env('GEMINI_REVIEW_MODEL', env('GEMINI_TEXT_MODEL', 'gemini-2.5-pro')) : env('GEMINI_TEXT_MODEL', 'gemini-2.5-pro')}:generateContent`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${purpose === 'review' ? env('GEMINI_REVIEW_MODEL', env('GEMINI_TEXT_MODEL', 'gemini-3.1-pro-preview')) : env('GEMINI_TEXT_MODEL', 'gemini-3.1-pro-preview')}:generateContent`,
     {
       method: 'POST',
       headers: {
