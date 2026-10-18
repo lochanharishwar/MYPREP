@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String?
+  preferences  String?    // JSON string for user preferences (tone, depth, default model)
+  notebooks    Notebook[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Notebook {
+  id           String          @id @default(cuid())
+  title        String          @default("Untitled Notebook")
+  subject      String?         @default("General Math")
+  paperStyle   String          @default("grid") // blank, lined, dotted, grid, graph
+  theme        String          @default("light") // light, dark
+  coverColor   String          @default("#3b82f6")
+  archived     Boolean         @default(false)
+  userId       String?
+  user         User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pages        NotebookPage[]
+  interactions AIInteraction[]
+  assets       Asset[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model NotebookPage {
+  id           String     @id @default(cuid())
+  pageNumber   Int        @default(1)
+  notebookId   String
+  notebook     Notebook   @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  contentJson  String     @default("{\"strokes\":[],\"objects\":[],\"camera\":{\"x\":0,\"y\":0,\"zoom\":1}}")
+  version      Int        @default(1)
+  thumbnail    String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([notebookId, pageNumber])
+}
+
+model AIInteraction {
+  id               String    @id @default(cuid())
+  notebookId       String
+  notebook         Notebook  @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  pageId           String?
+  actionType       String    // recognize, tutor, verify, graph, intent
+  backend          String    // ollama, google-gemma-api, transformers, mock
+  modelId          String    // gemma4:e4b, gemma-4-26b-a4b-it, etc.
+  promptVersion    String    @default("1.0.0")
+  durationMs       Int?
+  status           String    // success, error, unverified, verified
+  requestPayload   String?   // JSON
+  responsePayload  String?   // JSON
+  createdAt        DateTime  @default(now())
+}
+
+model Asset {
+  id         String    @id @default(cuid())
+  notebookId String
+  notebook   Notebook  @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  fileName   String
+  fileType   String
+  fileSize   Int
+  storageKey String
+  createdAt  DateTime  @default(now())
+}

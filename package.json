@@ -1,0 +1,38 @@
+{
+  "name": "inkwise",
+  "version": "1.0.0",
+  "private": true,
+  "description": "InkWise — Gemma 4-native AI Mathematics Notebook",
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "next lint",
+    "doctor": "node scripts/doctor.mjs",
+    "test:math": "node scripts/test-math.mjs",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push"
+  },
+  "dependencies": {
+    "@google/genai": "^2.30.0",
+    "@prisma/client": "^5.22.0",
+    "katex": "^0.16.11",
+    "lucide-react": "^0.460.0",
+    "mathjs": "^13.2.0",
+    "next": "^14.2.18",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/katex": "^0.16.7",
+    "@types/node": "^20.17.6",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "prisma": "^5.22.0",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.6.3"
+  }
+}
