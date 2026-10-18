@@ -14,7 +14,7 @@ An intelligent digital whiteboard that understands handwritten mathematics, expl
 ![Gemma 4](https://img.shields.io/badge/AI-Gemma%204-4F46E5)
 ![Python](https://img.shields.io/badge/Math-SymPy-3776AB?logo=python)
 
-[Features](#-key-features) • [Demo]([#-video-demonstration](https://drive.google.com/file/d/17lGD0RVXklf0f8iCV-j_7Z_rZBBXDUx5/view?usp=sharing)) • [Installation](#-installation) • [Architecture](#-system-architecture)
+[Features](#-key-features) • [Demo][#-video-demonstration](https://drive.google.com/file/d/17lGD0RVXklf0f8iCV-j_7Z_rZBBXDUx5/view?usp=sharing) • [Installation](#-installation) • [Architecture](#-system-architecture)
 
 </div>
 
