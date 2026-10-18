@@ -4,6 +4,7 @@ export type LocalGenerationConfig = {
   ready: boolean;
   providerConfigured: boolean;
   reason: string;
+  localAppUrl?: string;
   textCost: number | null;
   imageCost: number | null;
   textReady: boolean;

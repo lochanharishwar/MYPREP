@@ -7,9 +7,11 @@ Set-Location 'D:\CHATGPT\MARKETTING BY CODEX'
 npm run local
 ```
 
-Open http://localhost:3000 in the same browser each time. No BrandCurrent login or signup is required, including when Supabase settings exist. Keep the terminal running. You can also run `./Start-BrandCurrent.ps1`; it installs the locked dependencies only if they are missing.
+Open the **Local** URL printed by the server. The preferred address is `http://localhost:3000`, but when that port is busy the server may choose another, such as `http://localhost:3001`. Follow the printed URL so you do not accidentally open a different app using port 3000. No BrandCurrent login or signup is required, including when Supabase settings exist. Keep the terminal running. You can also run `./Start-BrandCurrent.ps1`; it installs the locked dependencies only if they are missing.
 
-Brands, scans, campaign metadata and limits stay in browser localStorage. Generated media stays in IndexedDB, avoiding localStorage's small capacity. Navigation and reload preserve saved results. Closing the tab interrupts local scans/generation; those runs are labeled interrupted next time. Switching browsers or clearing site data does not transfer your workspace.
+Brands, scans, campaign metadata and limits stay in browser localStorage. Generated media stays in IndexedDB, avoiding localStorage's small capacity. Both belong to the exact origin: scheme, hostname and port. Use the same browser and exact address each time; `localhost:3000`, `localhost:3001` and `127.0.0.1:3001` have separate saved workspaces. Navigation and reload preserve saved results. Closing the tab interrupts local scans/generation; those runs are labeled interrupted next time. Switching origins or browsers, or clearing site data, does not transfer your workspace.
+
+The public site's **Open local app** link uses the hosting environment's `LOCAL_APP_URL` setting. Set it to the printed local origin, for example `http://localhost:3001`, when the local server uses a different port. This changes the link only; it does not start the local server or move saved browser data. The server must already be running on the computer opening the link.
 
 ## Website scans
 

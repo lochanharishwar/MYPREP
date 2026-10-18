@@ -2,6 +2,19 @@ import { env, serviceStatus } from '@/lib/server/env';
 import { getLocalGenerationCosts } from '@/lib/generation-costs';
 export const dynamic = 'force-dynamic';
 export async function GET() {
+  let localAppUrl = 'http://localhost:3000/content';
+  try {
+    const configured = new URL(env('LOCAL_APP_URL', localAppUrl));
+    if (
+      ['http:', 'https:'].includes(configured.protocol) &&
+      ['localhost', '127.0.0.1', '[::1]'].includes(configured.hostname) &&
+      !configured.username &&
+      !configured.password
+    )
+      localAppUrl = `${configured.origin}/content`;
+  } catch {
+    // Invalid optional configuration keeps the standard local address.
+  }
   const providerConfigured = !!env('GEMINI_API_KEY');
   const hosted = process.env.NODE_ENV === 'production';
   const model = env('GEMINI_TEXT_MODEL', 'gemini-3.1-pro-preview');
@@ -34,6 +47,7 @@ export async function GET() {
         env('BROWSER_WORKSPACE_MODE') === 'sites',
       generation: {
         ...costs,
+        localAppUrl,
         ready: !hosted && providerConfigured,
         providerConfigured,
         reason: generationReason,

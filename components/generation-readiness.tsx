@@ -93,7 +93,7 @@ export function GenerationReadiness({
           <p>{config.reason}</p>
           {config.providerConfigured && (
             <a
-              href="http://localhost:3000/content"
+              href={config.localAppUrl ?? 'http://localhost:3000/content'}
               target="_blank"
               rel="noreferrer"
             >
