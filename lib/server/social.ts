@@ -3,6 +3,7 @@ import { boundedBytes } from './http';
 import type { ContentVersion, Entity, Platform } from '../contracts';
 import { db, assetUrl, updateEntity, rpc } from './db';
 import { env, required } from './env';
+import { storageBuckets } from './storage';
 import { decrypt, encrypt } from './security';
 import { providerJSON } from './providers';
 export interface Connection {
@@ -449,11 +450,11 @@ export async function upload(
     const bytes = await mediaBytes(content);
     const path = `${connection.workspace_id}/${crypto.randomUUID()}.${content.format === 'video' ? 'mp4' : 'png'}`;
     const { error } = await db()
-      .storage.from('published-media')
+      .storage.from(storageBuckets().published)
       .upload(path, bytes, { contentType: content.mimeType ?? 'image/png' });
     if (error) throw error;
     return {
-      url: db().storage.from('published-media').getPublicUrl(path).data
+      url: db().storage.from(storageBuckets().published).getPublicUrl(path).data
         .publicUrl,
       publicPath: path,
     };

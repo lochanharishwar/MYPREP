@@ -13,6 +13,7 @@ import {
   rpc,
 } from '@/lib/server/db';
 import { env, required } from '@/lib/server/env';
+import { storageBuckets } from '@/lib/server/storage';
 import { oauthCookie } from '@/lib/server/oauth-browser';
 import { assertRole, contentHash, parseCSV, utcFromLocal } from '@/lib/domain';
 import {
@@ -471,7 +472,9 @@ export async function POST(
           p_id: id,
         });
         if (path) {
-          const { error } = await db().storage.from('media').remove([path]);
+          const { error } = await db()
+            .storage.from(storageBuckets().media)
+            .remove([path]);
           if (error) {
             await insertEntity(
               s.workspaceId,

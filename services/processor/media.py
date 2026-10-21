@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -10,6 +11,22 @@ from urllib.parse import quote, urlparse
 import httpx
 
 MAX_BYTES = 18_000_000
+
+def storage_buckets():
+    custom_schema = (os.environ.get('SUPABASE_DB_SCHEMA') or 'public') != 'public'
+    def setting(key, fallback):
+        value = os.environ.get(key)
+        if custom_schema and not value:
+            raise ValueError(key+' must be configured for a custom database schema')
+        name = value or fallback
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,62}', name):
+            raise ValueError(key+' must be a valid storage bucket identifier')
+        return name
+    media = setting('SUPABASE_MEDIA_BUCKET', 'media')
+    published = setting('SUPABASE_PUBLISHED_MEDIA_BUCKET', 'published-media')
+    if media == published:
+        raise ValueError('Private and published media must use separate storage buckets')
+    return {'media': media, 'published': published}
 
 def encoding_spec(media_format, platform):
     if media_format not in ('image', 'video') or platform not in ('instagram', 'youtube', 'x', 'linkedin', 'reddit'):
@@ -60,6 +77,9 @@ def upload_review_file(client, output, mime):
     raise ValueError('Review file is still processing. Retry the durable job.')
 
 def process_job(job):
+    # Paths are relative to the deployment's configured private bucket. Changing
+    # configuration never moves or rewrites existing objects.
+    bucket = storage_buckets()['media']
     spec=encoding_spec(job['input']['format'],job['input']['platform'])
     prefix=f"{job['workspace_id']}/{job['brand_id']}/"
     path=job['input']['assetPath']
@@ -67,7 +87,7 @@ def process_job(job):
     origin=os.environ['SUPABASE_URL'].rstrip('/');key=os.environ['SUPABASE_SERVICE_ROLE_KEY'];headers={'Authorization':'Bearer '+key,'apikey':key}
     with tempfile.TemporaryDirectory(prefix='brandcurrent-') as folder, httpx.Client(timeout=60,follow_redirects=False) as client:
         source=Path(folder)/'input';size=0
-        with client.stream('GET',origin+'/storage/v1/object/authenticated/media/'+quote(path,safe='/'),headers=headers) as response:
+        with client.stream('GET',origin+'/storage/v1/object/authenticated/'+bucket+'/'+quote(path,safe='/'),headers=headers) as response:
             response.raise_for_status()
             with source.open('wb') as file:
                 for chunk in response.iter_bytes(65536):
@@ -77,7 +97,7 @@ def process_job(job):
         output=Path(folder)/('prepared.'+spec['extension']);metadata=prepare_file(source,output,spec,job['input']['format']=='video')
         target=prefix+job['id']+'.'+spec['extension']
         with output.open('rb') as file:
-            response=client.post(origin+'/storage/v1/object/media/'+quote(target,safe='/'),headers={**headers,'Content-Type':spec['mimeType'],'Content-Length':str(output.stat().st_size),'x-upsert':'true'},content=file)
+            response=client.post(origin+'/storage/v1/object/'+bucket+'/'+quote(target,safe='/'),headers={**headers,'Content-Type':spec['mimeType'],'Content-Length':str(output.stat().st_size),'x-upsert':'true'},content=file)
         response.raise_for_status()
         review=upload_review_file(client,output,spec['mimeType'])
         return {'assetPath':target,'mimeType':spec['mimeType'],'media':metadata,'reviewFile':review}

@@ -2,6 +2,7 @@ import 'server-only';
 import { createClient } from '@supabase/supabase-js';
 import { env, required } from './env';
 import type { Entity, Role } from '../contracts';
+import { storageBuckets } from './storage';
 export const db = () =>
   createClient(
     required('SUPABASE_URL'),
@@ -142,7 +143,7 @@ export async function rpc<T = unknown>(
 }
 export async function assetUrl(path: string, ttl = 3600) {
   const { data, error } = await db()
-    .storage.from('media')
+    .storage.from(storageBuckets().media)
     .createSignedUrl(path, ttl);
   if (error) throw error;
   return data.signedUrl;
@@ -155,7 +156,7 @@ export async function storeAsset(
 ) {
   const path = `${workspaceId}/${brandId}/${crypto.randomUUID()}.${mime === 'video/mp4' ? 'mp4' : mime === 'image/jpeg' ? 'jpg' : 'png'}`;
   const { error } = await db()
-    .storage.from('media')
+    .storage.from(storageBuckets().media)
     .upload(path, bytes, { contentType: mime, upsert: false });
   if (error) throw error;
   return path;

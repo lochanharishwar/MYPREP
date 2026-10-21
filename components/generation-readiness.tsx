@@ -1,9 +1,10 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ExternalLink, RefreshCw, ShieldCheck } from 'lucide-react';
 import {
   localCampaignReserve,
   type LocalGenerationConfig,
+  type ProviderConnectionCheck,
 } from '@/lib/local-generation';
 
 export function useGenerationReadiness(enabled: boolean) {
@@ -59,6 +60,44 @@ export function GenerationReadiness({
   onSettings: () => void;
 }) {
   const { config, error, refresh } = setup;
+  const [connection, setConnection] = useState<ProviderConnectionCheck | null>(
+    null,
+  );
+  const [checkError, setCheckError] = useState('');
+  const [checking, setChecking] = useState(false);
+  const probe = useRef<AbortController | null>(null);
+  useEffect(() => () => probe.current?.abort(), []);
+  const checkConnection = async () => {
+    probe.current?.abort();
+    const controller = new AbortController();
+    probe.current = controller;
+    setChecking(true);
+    setConnection(null);
+    setCheckError('');
+    try {
+      const response = await fetch('/api/local/provider-check', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+        signal: controller.signal,
+      });
+      const result = (await response.json()) as ProviderConnectionCheck & {
+        error?: string;
+      };
+      if (!response.ok)
+        throw new Error(result.error || 'Connection check unavailable.');
+      if (!controller.signal.aborted) setConnection(result);
+    } catch (failure) {
+      if (!controller.signal.aborted)
+        setCheckError(
+          failure instanceof Error
+            ? failure.message
+            : 'Connection check unavailable.',
+        );
+    } finally {
+      if (!controller.signal.aborted) setChecking(false);
+    }
+  };
   const quote = config
     ? localCampaignReserve(platforms, formats, config)
     : null;
@@ -81,7 +120,13 @@ export function GenerationReadiness({
         </strong>
         <button
           type="button"
-          onClick={refresh}
+          onClick={() => {
+            probe.current?.abort();
+            setConnection(null);
+            setCheckError('');
+            setChecking(false);
+            refresh();
+          }}
           aria-label="Refresh generation setup"
         >
           <RefreshCw size={13} />
@@ -104,6 +149,44 @@ export function GenerationReadiness({
       )}
       {config?.ready && (
         <>
+          <div className="generation-connection-check">
+            <button
+              type="button"
+              className="text-link"
+              onClick={() => void checkConnection()}
+              disabled={checking}
+            >
+              {checking ? 'Checking Gemini…' : 'Check provider connection'}
+            </button>
+            <p>
+              Checks model access without generating content. No brand data is
+              sent.
+            </p>
+            {checkError && <p role="alert">{checkError}</p>}
+            {connection && (
+              <>
+                <ul>
+                  {connection.checks.map((check) => (
+                    <li key={check.model}>
+                      <strong>
+                        {check.uses.join(' & ')}:{' '}
+                        {check.ok ? 'Connected' : 'Check needed'}
+                      </strong>
+                      {!check.ok && <span>{check.message}</span>}
+                    </li>
+                  ))}
+                </ul>
+                <p>
+                  Checked{' '}
+                  {new Date(connection.checkedAt).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                  . Paid generation and billing are not verified by this check.
+                </p>
+              </>
+            )}
+          </div>
           {quote ? (
             <dl className="generation-reservation">
               <div>

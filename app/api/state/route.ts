@@ -1,6 +1,7 @@
 import { apiFailure } from '@/lib/server/api-error';
 import { db, scope, authenticate, rpc } from '@/lib/server/db';
-import { env, serviceStatus } from '@/lib/server/env';
+import { env } from '@/lib/server/env';
+import { serviceStatus } from '@/lib/server/service-status';
 export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   const base = {

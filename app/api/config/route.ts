@@ -1,4 +1,5 @@
-import { env, serviceStatus } from '@/lib/server/env';
+import { env } from '@/lib/server/env';
+import { serviceStatus } from '@/lib/server/service-status';
 import { getLocalGenerationCosts } from '@/lib/generation-costs';
 export const dynamic = 'force-dynamic';
 export async function GET() {

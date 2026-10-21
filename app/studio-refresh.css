@@ -483,6 +483,14 @@
   line-height: 1.5;
 }
 
+.generation-connection-check {
+  padding-block: 6px 12px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--line, #ffffff14);
+}
+.generation-connection-check ul { padding-left: 16px; margin: 10px 0; }
+.generation-connection-check li { margin-block: 7px; font-size: 11px; line-height: 1.6; }
+.generation-connection-check li span { display: block; color: var(--muted); }
 .generation-readiness {
   padding: 12px;
   border: 1px solid #85e0ec26;

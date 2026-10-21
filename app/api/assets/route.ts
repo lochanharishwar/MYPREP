@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { scope, db, storeAsset } from '@/lib/server/db';
 import { assertRole } from '@/lib/domain';
 import { boundedBytes } from '@/lib/server/http';
+import { storageBuckets } from '@/lib/server/storage';
 export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   try {
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
       },
     });
     if (error) {
-      await db().storage.from('media').remove([path]);
+      await db().storage.from(storageBuckets().media).remove([path]);
       throw error;
     }
     return Response.json({ id: data }, { status: 201 });

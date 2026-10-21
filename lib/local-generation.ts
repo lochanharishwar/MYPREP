@@ -1,5 +1,12 @@
 import type { Platform } from './contracts';
 
+export type ProviderConnectionCheck = {
+  ok: boolean;
+  checkedAt: string;
+  generationTested: false;
+  checks: { model: string; uses: string[]; ok: boolean; message: string }[];
+};
+
 export type LocalGenerationConfig = {
   ready: boolean;
   providerConfigured: boolean;

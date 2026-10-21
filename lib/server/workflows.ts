@@ -5,6 +5,7 @@ import { validatePlatformContent, type MediaMetadata } from '../media-spec';
 import { checkBrandCopy, AI_VERSIONS } from '../brand-policy';
 import { db, entity, insertEntity, updateEntity, rpc, assetUrl } from './db';
 import { env, required } from './env';
+import { storageBuckets } from './storage';
 import {
   discover,
   scrape,
@@ -678,7 +679,10 @@ export const generationWorkflow = inngest.createFunction(
             const content: ContentVersion = {
               provenance: {
                 ...AI_VERSIONS,
-                generationModel: env('GEMINI_TEXT_MODEL', 'gemini-3.1-pro-preview'),
+                generationModel: env(
+                  'GEMINI_TEXT_MODEL',
+                  'gemini-3.1-pro-preview',
+                ),
                 reviewModel: env(
                   'GEMINI_REVIEW_MODEL',
                   env('GEMINI_TEXT_MODEL', 'gemini-3.1-pro-preview'),
@@ -1318,7 +1322,7 @@ export const recoveryWorkflow = inngest.createFunction(
         .limit(100);
       for (const r of data ?? []) {
         const { error } = await db()
-          .storage.from('media')
+          .storage.from(storageBuckets().media)
           .remove([r.payload.path]);
         if (!error) await db().from('entities').delete().eq('id', r.id);
       }

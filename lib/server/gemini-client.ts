@@ -49,7 +49,11 @@ async function checkLocalInputTokens(model: string, body: object) {
       new Error(
         response.status === 429
           ? 'Gemini quota or rate limit reached while checking the request size. No generation was dispatched for this step.'
-          : 'Gemini could not check the request size. Verify the configured model and key access before retrying.',
+          : response.status === 401 || response.status === 403
+            ? 'The Gemini key is invalid or does not have access to this model. Check the key in your server settings.'
+            : response.status === 404
+              ? 'The configured Gemini model is unavailable for this account or has been retired. Update the server model setting.'
+              : 'Gemini could not check the request size. Verify the configured model and key access before retrying.',
       ),
       { status: response.status === 429 ? 429 : 502 },
     );
@@ -80,6 +84,47 @@ async function checkLocalInputTokens(model: string, body: object) {
       ),
       { status: 413 },
     );
+}
+
+// A fixed, content-free connection probe. This never calls generateContent and
+// does not transmit brand records, customer data, media, or campaign briefs.
+export async function checkGeminiConnection() {
+  required('GEMINI_API_KEY');
+  const textModel = env('GEMINI_TEXT_MODEL', 'gemini-3.1-pro-preview');
+  const models = [
+    { model: textModel, use: 'Captions' },
+    { model: env('GEMINI_REVIEW_MODEL', textModel), use: 'Review' },
+    { model: env('GEMINI_IMAGE_MODEL', 'gemini-3-pro-image'), use: 'Images' },
+  ];
+  const checks = await Promise.all(
+    [...new Set(models.map((entry) => entry.model))].map(async (model) => {
+      const uses = models
+        .filter((entry) => entry.model === model)
+        .map((entry) => entry.use);
+      try {
+        await checkLocalInputTokens(model, {
+          contents: [{ role: 'user', parts: [{ text: 'Connection check.' }] }],
+        });
+        return { model, uses, ok: true, message: 'Connection check passed.' };
+      } catch (error) {
+        return {
+          model,
+          uses,
+          ok: false,
+          message:
+            error instanceof Error
+              ? error.message
+              : 'The connection check failed.',
+        };
+      }
+    }),
+  );
+  return {
+    ok: checks.every((check) => check.ok),
+    checkedAt: new Date().toISOString(),
+    generationTested: false as const,
+    checks,
+  };
 }
 
 export async function geminiRequest(model: string, body: unknown) {
@@ -147,7 +192,10 @@ export async function geminiText(
   boundedLocal = false,
 ) {
   const model = review
-    ? env('GEMINI_REVIEW_MODEL', env('GEMINI_TEXT_MODEL', 'gemini-3.1-pro-preview'))
+    ? env(
+        'GEMINI_REVIEW_MODEL',
+        env('GEMINI_TEXT_MODEL', 'gemini-3.1-pro-preview'),
+      )
     : env('GEMINI_TEXT_MODEL', 'gemini-3.1-pro-preview');
   const body = {
     systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
