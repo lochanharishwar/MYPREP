@@ -30,6 +30,7 @@ import {
 import { reserve } from './billing';
 import { reconcilePublication } from './recovery';
 import { feedbackSummary, competitorNews } from './feedback';
+import { workflowError as textError } from './workflow-error';
 import { prepareDraft, reviewDraft } from './draft-review';
 import type {
   BrandDNA,
@@ -95,8 +96,6 @@ export async function dispatch(
     return { queued: true, delivery: 'pending' };
   }
 }
-const textError = (e: unknown) =>
-  e instanceof Error ? e.message : 'The operation could not complete.';
 const persistedPageSchema = z.object({
   url: z.url(),
   markdown: z.string(),

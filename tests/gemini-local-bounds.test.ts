@@ -5,7 +5,11 @@ import {
   SYSTEM_PROMPT,
 } from '../lib/server/gemini-client';
 
+const referenceFetch = vi.hoisted(() => vi.fn());
+vi.mock('../lib/server/public-fetch', () => ({ publicFetch: referenceFetch }));
+
 afterEach(() => {
+  vi.clearAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
@@ -21,6 +25,50 @@ const answer = (parts: unknown[]) =>
   Response.json({ candidates: [{ content: { parts } }] });
 
 describe('local Gemini spending bounds (mocked provider transport)', () => {
+  it.each(['text', 'image'])('does not begin %s work after cancellation', async (format) => {
+    fixtureEnv();
+    const lifecycle = new AbortController();
+    lifecycle.abort();
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    await expect(format === 'text'
+      ? geminiText('A caption.', [], false, false, true, lifecycle.signal)
+      : geminiImage('A product.', ['https://brand.example/product.png'], '1:1', true, lifecycle.signal)
+    ).rejects.toThrow('cancelled');
+    expect(referenceFetch).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each(['text', 'image'])('does not dispatch paid %s generation when cancelled during countTokens', async (format) => {
+    fixtureEnv();
+    const lifecycle = new AbortController();
+    const fetcher = vi.fn(async () => {
+      lifecycle.abort();
+      return Response.json({ totalTokens: 350 });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    await expect(format === 'text'
+      ? geminiText('A caption.', [], false, false, true, lifecycle.signal)
+      : geminiImage('A product.', [], '1:1', true, lifecycle.signal)
+    ).rejects.toThrow('cancelled');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect((fetcher.mock.calls[0] as unknown as [string])[0]).toContain(':countTokens');
+  });
+
+  it('does not dispatch token checks or image generation when cancelled while loading a reference', async () => {
+    fixtureEnv();
+    const lifecycle = new AbortController();
+    referenceFetch.mockImplementationOnce(async () => {
+      lifecycle.abort();
+      return { response: new Response('fixture', { headers: { 'content-type': 'image/png' } }) };
+    });
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    await expect(geminiImage('A product.', ['https://brand.example/product.png'], '1:1', true, lifecycle.signal)).rejects.toThrow('cancelled');
+    expect(referenceFetch).toHaveBeenCalledTimes(1);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('preflights the exact system, text, and media request before paid text review', async () => {
     fixtureEnv();
     const fetcher = vi.fn(async (url: string) =>

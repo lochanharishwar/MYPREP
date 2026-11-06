@@ -80,7 +80,9 @@ def paths_from_events(events, lookback_days=30, period_start=None, period_end=No
             groups[identity].append(event)
     paths = []
     for rows in groups.values():
-        rows.sort(key=lambda e: (e['occurred_at'], e.get('id', '')))
+        # ISO strings with different UTC offsets (or fractional precision) do
+        # not sort chronologically. Compare instants, retaining ID tie-breaking.
+        rows.sort(key=lambda e: (datetime.fromisoformat(e['occurred_at'].replace('Z', '+00:00')), e.get('id') or ''))
         touches = []
         for event in rows:
             at = datetime.fromisoformat(event['occurred_at'].replace('Z', '+00:00'))

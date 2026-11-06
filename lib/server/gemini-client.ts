@@ -15,6 +15,13 @@ type Part = {
   thought?: boolean;
   inlineData?: { data: string; mimeType: string };
 };
+function assertGenerationActive(signal?: AbortSignal) {
+  if (signal?.aborted)
+    throw Object.assign(
+      new Error('The request was cancelled. No further work was started.'),
+      { status: 409 },
+    );
+}
 function validateModel(model: string) {
   if (!/^gemini-[\w.-]+$/.test(model))
     throw new Error(
@@ -190,7 +197,9 @@ export async function geminiText(
   json = false,
   review = false,
   boundedLocal = false,
+  signal?: AbortSignal,
 ) {
+  assertGenerationActive(signal);
   const model = review
     ? env(
         'GEMINI_REVIEW_MODEL',
@@ -207,6 +216,10 @@ export async function geminiText(
     },
   };
   if (boundedLocal) await checkLocalInputTokens(model, body);
+  // The client can disconnect while the unbilled request-size check runs.
+  // Recheck immediately before starting a paid call; dispatched work may still
+  // complete and be billed, so its caller must retain the operation lease.
+  assertGenerationActive(signal);
   const result = await geminiRequest(model, body);
   const text = result
     .map((p) => p.text ?? '')
@@ -239,8 +252,11 @@ export async function geminiImage(
   references: string[] = [],
   aspectRatio = '1:1',
   boundedLocal = false,
+  signal?: AbortSignal,
 ) {
+  assertGenerationActive(signal);
   const parts = await referenceParts(references);
+  assertGenerationActive(signal);
   const model = env('GEMINI_IMAGE_MODEL', 'gemini-3-pro-image');
   const body = {
     systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
@@ -257,6 +273,7 @@ export async function geminiImage(
     },
   };
   if (boundedLocal) await checkLocalInputTokens(model, body);
+  assertGenerationActive(signal);
   const result = await geminiRequest(model, body);
   const image = result.find((p) => p.inlineData)?.inlineData;
   if (

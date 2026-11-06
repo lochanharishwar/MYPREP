@@ -45,12 +45,13 @@ export async function scope(request: Request, brandId?: string) {
       { status: 403 },
     );
   if (brandId) {
-    const { data: b } = await db()
+    const { data: b, error: brandError } = await db()
       .from('brands')
       .select('id')
       .eq('id', brandId)
       .eq('workspace_id', data.workspace_id)
       .maybeSingle();
+    if (brandError) throw brandError;
     if (!b) throw Object.assign(new Error('Brand not found.'), { status: 404 });
     if (
       !(await rpc<boolean>('brand_access_for_user', {

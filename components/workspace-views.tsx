@@ -1,4 +1,5 @@
 'use client';
+import { BriefPresets, type BriefPreset } from './brief-presets';
 import { ActivationNotice } from './activation-notice';
 import {
   GenerationReadiness,
@@ -16,6 +17,7 @@ import { BrandIdentitySummary } from './brand-identity';
 import { PageInsights } from './page-insights';
 import { ConfirmAction } from './confirm-action';
 import { PublicationResolution } from './publication-resolution';
+import { rankObservations } from '@/lib/campaign-progress';
 import { ContentRevision } from './content-revision';
 import { ThinkingIndicator } from './thinking-indicator';
 import { CustomerExport } from './customer-export';
@@ -659,6 +661,7 @@ export function ContentView() {
       Number(budget) <= 0);
   return (
     <div className="stack content-studio">
+      <BriefPresets key={w.workspaceId + ':' + w.brandId} scope={w.workspaceId + ':' + w.brandId} value={{idea,audience,scenario,event,direction,formats,targets} as BriefPreset} apply={v=>{setIdea(v.idea);setAudience(v.audience);setScenario(v.scenario);setEvent(v.event);setDirection(v.direction);setFormats(v.formats);setTargets(v.targets);}} />
       <section className="panel glass studio-compose">
         <ActivationNotice feature="generation" />
         <div className="section-title studio-heading">
@@ -1647,6 +1650,7 @@ export function AnalyticsView() {
       </div>
       <ReportControls report={reportState} />
       <ActivationNotice feature="analytics" />
+      <section className="panel"><h2>Performance snapshot</h2><p className="muted small">Top posts by {metric}, using the latest observation per post in this report. Counts compare volume, not efficiency or causation.</p>{rankObservations(latest, metric).length ? <ol>{rankObservations(latest, metric).map(row => <li key={row.id}><strong>{row.payload.platform} · {row.payload.postId}</strong> — {row.payload.metrics[metric]?.toLocaleString()} {metric}<p className="small muted">Observed {new Date(row.payload.observedAt).toLocaleString()} · {row.payload.definitions[metric] || 'Use the platform definition.'}</p></li>)}</ol> : <p>Awaiting comparable platform observations. Publish an approved version, then collect metrics.</p>}{rankObservations(latest, metric).length > 0 && <p className="small muted">Suggested experiment, not a conclusion: repeat the strongest observed topic with one change to the opening. Compare the same metric, platform and observation window.</p>}</section>
       <div className="metric-grid">
         {[
           ['reach', 'Reported reach'],

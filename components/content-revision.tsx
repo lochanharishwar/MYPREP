@@ -1,4 +1,5 @@
 'use client';
+import { ContentMedia } from './content-media';
 import { useState } from 'react';
 import type { Entity, ContentVersion } from '@/lib/contracts';
 import { useWorkspace } from './workspace-provider';
@@ -56,8 +57,10 @@ export function ContentRevision({
             onChange={(e) => setCaption(e.target.value)}
           />
         </label>
+        {!w.localMode && <section className="panel"><strong>{content.payload.platform} caption preview</strong><p className="preserve-lines">{caption}</p><span className="small muted">{caption.length.toLocaleString()} characters · review required before approval</span></section>}
         <details>
-          <summary>Original caption</summary>
+          <summary>Compare with original version</summary>
+          {content.payload.format !== 'text' && <ContentMedia content={content} />}
           <p className="preserve-lines">{content.payload.caption}</p>
         </details>
         <button

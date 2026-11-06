@@ -2,6 +2,31 @@ import { z } from 'zod';
 import { boundedBytes } from './http';
 import { env } from './env';
 
+// Bound work within this runtime. This is not a distributed rate limiter or a
+// spending ledger; browser monthly limits still remain advisory.
+const activeOperations = new Map<string, number>();
+const concurrency = { scan: 2, generation: 1, 'provider-check': 1 } as const;
+export function beginLocalOperation(operation: keyof typeof concurrency) {
+  const active = activeOperations.get(operation) ?? 0;
+  if (active >= concurrency[operation])
+    throw Object.assign(
+      new Error('This service is already working on another request. Wait for it to finish and retry.'),
+      { status: 429 },
+    );
+  activeOperations.set(operation, active + 1);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    activeOperations.set(operation, (activeOperations.get(operation) ?? 1) - 1);
+  };
+}
+
+export function assertRequestActive(request: Request) {
+  if (request.signal.aborted)
+    throw Object.assign(new Error('The request was cancelled. No further work was started.'), { status: 409 });
+}
+
 // These endpoints never bypass the authenticated, durable workspace API.
 export function assertLocalRequest(
   request: Request,
@@ -52,11 +77,12 @@ export function assertLocalRequest(
     throw Object.assign(new Error('Cross-site requests are not allowed.'), {
       status: 403,
     });
-  if (!request.headers.get('content-type')?.includes('application/json'))
+  if (request.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase() !== 'application/json')
     throw Object.assign(new Error('Send a JSON request.'), { status: 415 });
 }
 export async function localBody(request: Request, publicWebsiteRead = false) {
   assertLocalRequest(request, publicWebsiteRead);
+  assertRequestActive(request);
   const text = new TextDecoder().decode(await boundedBytes(request, 500000));
   try {
     return JSON.parse(text);
@@ -83,6 +109,6 @@ export function localFailure(error: unknown) {
         e.message ||
         'Request failed. Retry after checking the service settings.',
     },
-    { status: e.status ?? 502 },
+    { status: e.status ?? 502, headers: { 'Cache-Control': 'no-store', ...(e.status === 429 ? { 'Retry-After': '10' } : {}) } },
   );
 }

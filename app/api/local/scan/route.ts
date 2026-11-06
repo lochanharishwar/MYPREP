@@ -1,15 +1,20 @@
 import { z } from 'zod';
 import { crawlWebsite } from '@/lib/server/local-crawl';
-import { localBody, localFailure } from '@/lib/server/local-request';
+import { assertRequestActive, beginLocalOperation, localBody, localFailure } from '@/lib/server/local-request';
 export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
+  let release: (() => void) | undefined;
+  let streaming = false;
   try {
     const input = z
       .object({ url: z.string().min(1).max(2000) })
       .parse(await localBody(request, true));
+    assertRequestActive(request);
+    release = beginLocalOperation('scan');
     if (request.headers.get('accept')?.includes('application/x-ndjson')) {
       const encoder = new TextEncoder();
       let closed = false;
+      streaming = true;
       const stream = new ReadableStream({
         async start(controller) {
           const send = (value: unknown) => {
@@ -30,6 +35,9 @@ export async function POST(request: Request) {
                   : 'Website scan could not finish.',
             });
           } finally {
+            // Cancelling a response does not finish the crawl. Keep its lease
+            // until the work actually settles, so cancellation cannot bypass it.
+            release?.();
             if (!closed) {
               closed = true;
               controller.close();
@@ -53,5 +61,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     return localFailure(error);
+  } finally {
+    if (!streaming) release?.();
   }
 }

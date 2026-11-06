@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { campaignSchema } from '@/lib/contracts';
 import { reviewScore } from '@/lib/domain';
 import { capabilities } from '@/lib/server/social';
-import { localBody, localFailure } from '@/lib/server/local-request';
+import { assertRequestActive, beginLocalOperation, localBody, localFailure } from '@/lib/server/local-request';
 import {
   geminiText,
   geminiImage,
@@ -11,6 +11,7 @@ import {
 import { env, required } from '@/lib/server/env';
 import { getLocalGenerationCosts } from '@/lib/generation-costs';
 import { creativeBrandSchema } from '@/lib/creative-context';
+import { localAttemptReserve } from '@/lib/local-generation';
 const input = campaignSchema.omit({ brandId: true }).extend({
   formats: z.array(z.enum(['text', 'image'])).length(1),
   platforms: campaignSchema.shape.platforms.length(1),
@@ -21,6 +22,7 @@ const input = campaignSchema.omit({ brandId: true }).extend({
 });
 export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
+  let release: (() => void) | undefined;
   try {
     const body = input.parse(await localBody(request));
     if (process.env.NODE_ENV === 'production')
@@ -47,6 +49,11 @@ export async function POST(request: Request) {
       throw Object.assign(new Error(costs.errors.join(' ')), { status: 503 });
     if (!capabilities[platform].formats.includes(format))
       throw new Error(`${platform} does not support ${format} content.`);
+    const reservation = localAttemptReserve(format, costs);
+    if (reservation === null || body.budget < reservation)
+      throw Object.assign(new Error('The campaign limit is below the reservation for one generation and review attempt.'), { status: 400 });
+    assertRequestActive(request);
+    release = beginLocalOperation('generation');
     const facts = JSON.stringify(body.brand);
     const brief = JSON.stringify({
       idea: body.idea,
@@ -62,7 +69,11 @@ export async function POST(request: Request) {
       false,
       false,
       true,
+      request.signal,
     );
+    // Cancellation cannot undo dispatched provider calls or their charges, but
+    // it must stop us from dispatching the next paid stage.
+    assertRequestActive(request);
     const image =
       format === 'image'
         ? await geminiImage(
@@ -70,14 +81,17 @@ export async function POST(request: Request) {
             body.referenceUrl ? [body.referenceUrl] : [],
             platform === 'instagram' ? '4:5' : '1:1',
             true,
+            request.signal,
           )
         : null;
+    assertRequestActive(request);
     const raw = await geminiText(
       `${context}\nReview the actual finished caption and any attached finished image. Caption: ${caption}\nGrade each criterion 1–10: brandAlignment, psychology, visualQuality, platformFit. For text visualQuality means readability. Return JSON with those numeric fields and feedback:string[] of specific corrections. Unsupported claims or missing product fidelity must lower scores.`,
       image ? [{ inlineData: image }] : [],
       true,
       true,
       true,
+      request.signal,
     );
     const review = reviewScore(
       reviewSchema.parse(
@@ -95,5 +109,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     return localFailure(error);
+  } finally {
+    release?.();
   }
 }

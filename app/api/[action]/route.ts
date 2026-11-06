@@ -1,3 +1,4 @@
+import { apiFailure, PublicRequestError } from '@/lib/server/api-error';
 import { z } from 'zod';
 import { validatePlatformContent } from '@/lib/media-spec';
 import { brandPolicySchema, checkBrandCopy } from '@/lib/brand-policy';
@@ -44,7 +45,7 @@ export async function POST(
     const raw = new TextDecoder().decode(await boundedBytes(request, 1500000));
     if (raw.length > 1500000)
       return Response.json({ error: 'Request is too large.' }, { status: 413 });
-    const body = JSON.parse(raw);
+    const body = z.record(z.string(), z.unknown()).parse(JSON.parse(raw));
     if (action === 'workspace') {
       const user = await authenticate(request);
       const client = createClient(
@@ -79,12 +80,15 @@ export async function POST(
         typeof body[key] === 'string' &&
         z.uuid().safeParse(body[key]).success
       ) {
-        const { data: reference } = await db()
+        const { data: reference, error: referenceError } = await db()
           .from('entities')
           .select('brand_id')
           .eq('workspace_id', s.workspaceId)
           .eq('id', body[key])
           .maybeSingle();
+        if (referenceError) throw referenceError;
+        if (!reference)
+          throw new PublicRequestError('The requested record is unavailable.', 404);
         if (
           reference?.brand_id &&
           !(await rpc<boolean>('brand_access_for_user', {
@@ -92,9 +96,7 @@ export async function POST(
             p_user: s.user.id,
           }))
         )
-          throw Object.assign(new Error('Brand access denied.'), {
-            status: 403,
-          });
+          throw new PublicRequestError('Brand access denied.', 403);
       }
     }
     if (
@@ -103,9 +105,7 @@ export async function POST(
       ) &&
       !s.customerAccess
     )
-      throw Object.assign(new Error('Customer-data permission is required.'), {
-        status: 403,
-      });
+      throw new PublicRequestError('Customer-data permission is required.', 403);
     if (
       !(await rpc<boolean>('consume_ingest_limit', {
         p_key: `action:${s.workspaceId}:${s.user.id}`,
@@ -138,7 +138,7 @@ export async function POST(
       name = kind,
     ) => runCommand<Entity<T>>(name, { brandId: brand, kind, payload });
     if (action === 'evidence') {
-      if (!brandId) throw new Error('Select a brand.');
+      if (!brandId) throw new PublicRequestError('Select a brand.');
       const ids = z.array(uuid).max(100).parse(body.ids);
       const { data, error } = await db()
         .from('feedback')
@@ -149,7 +149,7 @@ export async function POST(
       return Response.json({ sources: data });
     }
     if (action === 'journey') {
-      if (!brandId) throw new Error('Select a brand.');
+      if (!brandId) throw new PublicRequestError('Select a brand.');
       const customer = z.string().min(1).max(150).parse(body.customerId);
       return Response.json({
         events: await rpc('journey_details', {
@@ -165,7 +165,7 @@ export async function POST(
       });
     }
     if (action === 'funnel') {
-      if (!brandId) throw new Error('Select a brand.');
+      if (!brandId) throw new PublicRequestError('Select a brand.');
       return Response.json(await rpc('journey_funnel', { p_brand: brandId }));
     }
     if (action === 'brands') {
@@ -223,7 +223,7 @@ export async function POST(
     }
     if (action === 'scan') {
       editor();
-      if (!brandId) throw new Error('Select a brand.');
+      if (!brandId) throw new PublicRequestError('Select a brand.');
       required('FIRECRAWL_API_KEY');
       required('GEMINI_API_KEY');
       required('BROWSERLESS_API_KEY');
@@ -256,7 +256,7 @@ export async function POST(
         'scan',
       );
       if (!['partial', 'blocked'].includes(String(scan.payload.status)))
-        throw new Error('This scan is not paused.');
+        throw new PublicRequestError('This scan is not paused.');
       const failed = scan.payload.failed as string[];
       await updateEntity(scan.id, {
         ...scan.payload,
@@ -330,7 +330,7 @@ export async function POST(
       for (const id of policy.assetIds) {
         const asset = await entity(id, s.workspaceId, 'brand_asset');
         if (asset.brand_id !== old.brand_id)
-          throw new Error('Pinned assets must belong to this brand.');
+          throw new PublicRequestError('Pinned assets must belong to this brand.');
       }
       const ids = new Set(old.payload.evidence.map((e) => e.id));
       if (
@@ -338,7 +338,7 @@ export async function POST(
           c.evidenceIds.some((id) => !ids.has(id)),
         )
       )
-        throw new Error(
+        throw new PublicRequestError(
           'Every approved claim must cite evidence in this Brand DNA version.',
         );
       const now = new Date().toISOString();
@@ -364,7 +364,7 @@ export async function POST(
         if (
           !input.platforms.some((p) => capabilities[p].formats.includes(format))
         )
-          throw new Error(
+          throw new PublicRequestError(
             `${format} is unsupported by the selected platforms.`,
           );
       required('GEMINI_API_KEY');
@@ -373,25 +373,27 @@ export async function POST(
         required('PROCESSOR_URL');
         required('PROCESSOR_SECRET');
       }
-      const { data: dna } = await db()
+      const { data: dna, error: dnaError } = await db()
         .from('entities')
         .select('*')
+        .eq('workspace_id', s.workspaceId)
         .eq('brand_id', input.brandId)
         .eq('kind', 'dna')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (dnaError) throw dnaError;
       if (!dna)
-        throw new Error('Analyze your website before generating content.');
+        throw new PublicRequestError('Analyze your website before generating content.');
       if (!dna.payload.governance?.approvedBy)
-        throw new Error(
+        throw new PublicRequestError(
           'Ask an owner to approve the Brand DNA governance policy before generation.',
         );
       if (
         dna.payload.governance.rightsExpireAt &&
         Date.parse(dna.payload.governance.rightsExpireAt) <= Date.now()
       )
-        throw new Error('Brand usage rights expired.');
+        throw new PublicRequestError('Brand usage rights expired.');
       const campaign = await createJob(input.brandId, 'campaign', {
         ...input,
         dnaId: dna.id,
@@ -444,7 +446,7 @@ export async function POST(
       if (body.decision === 'edit') {
         const caption = z.string().min(1).max(40000).parse(body.caption);
         if (caption === content.payload.caption)
-          throw new Error('Change the caption before creating a revision.');
+          throw new PublicRequestError('Change the caption before creating a revision.');
         const draft = await createJob(
           content.brand_id!,
           'content',
@@ -482,7 +484,7 @@ export async function POST(
               'asset_deletion',
               { path, status: 'pending' },
             );
-            throw new Error(
+            throw new PublicRequestError(
               'Content rejected; asset deletion queued for retry.',
             );
           }
@@ -523,7 +525,7 @@ export async function POST(
         );
         return Response.json({ jobId: campaign.id }, { status: 202 });
       }
-      throw new Error('Unknown decision.');
+      throw new PublicRequestError('Unknown decision.');
     }
     if (action === 'schedule') {
       approver();
@@ -585,7 +587,7 @@ export async function POST(
       }
       const at =
         command === 'reschedule'
-          ? utcFromLocal(body.localTime, body.timezone)
+          ? utcFromLocal(z.string().parse(body.localTime), z.string().parse(body.timezone))
           : null;
       const result = await runCommand<ScheduledPost>('change-schedule', {
         id,
@@ -603,7 +605,7 @@ export async function POST(
     }
     if (action === 'connect') {
       owner();
-      if (!brandId) throw new Error('Select a brand.');
+      if (!brandId) throw new PublicRequestError('Select a brand.');
       const platform = z.enum(platforms).parse(body.platform);
       required(platform.toUpperCase() + '_CLIENT_ID');
       required(platform.toUpperCase() + '_CLIENT_SECRET');
@@ -655,12 +657,12 @@ export async function POST(
         record.payload.platform === 'reddit' &&
         !/^\w{2,30}$/.test(destination)
       )
-        throw new Error('Enter a subreddit name without r/.');
+        throw new PublicRequestError('Enter a subreddit name without r/.');
       if (
         record.payload.platform === 'linkedin' &&
         !/^urn:li:(organization|person):[\w-]+$/.test(destination)
       )
-        throw new Error('Enter a LinkedIn author URN.');
+        throw new PublicRequestError('Enter a LinkedIn author URN.');
       await rpc('connection_destination', {
         p_workspace: s.workspaceId,
         p_id: record.id,
@@ -670,7 +672,7 @@ export async function POST(
     }
     if (action === 'tracking') {
       owner();
-      if (!brandId) throw new Error('Select a brand.');
+      if (!brandId) throw new PublicRequestError('Select a brand.');
       const secret = Buffer.from(
         crypto.getRandomValues(new Uint8Array(32)),
       ).toString('hex');
@@ -689,11 +691,11 @@ export async function POST(
         webhookSecret: secret,
         script: `<script async src="${required('APP_ORIGIN')}/tracker.js" data-key="${record.id}"></script>`,
         endpoint: `${required('APP_ORIGIN')}/api/collect`,
-      });
+      }, { headers: { 'Cache-Control': 'private,no-store' } });
     }
     if (action === 'imports') {
       editor();
-      if (!brandId) throw new Error('Select a brand.');
+      if (!brandId) throw new PublicRequestError('Select a brand.');
       const input = z
         .object({
           kind: z.enum([
@@ -708,7 +710,7 @@ export async function POST(
         .parse(body);
       const rows = parseCSV(input.csv);
       if (rows.length > 500)
-        throw new Error('Import at most 500 rows per batch.');
+        throw new PublicRequestError('Import at most 500 rows per batch.');
       if (input.kind === 'events') {
         const events = rows.map((r) =>
           eventSchema.parse({
@@ -722,6 +724,26 @@ export async function POST(
             properties: r.properties ? JSON.parse(r.properties) : {},
           }),
         );
+        if (events.some((event) => event.eventId.startsWith('browser:')))
+          throw new PublicRequestError(
+            'The browser: event ID prefix is reserved for unverified browser events.',
+          );
+        const campaignIds = [
+          ...new Set(events.flatMap((event) => event.campaignId ? [event.campaignId] : [])),
+        ];
+        if (campaignIds.length) {
+          const { data: campaigns, error: campaignError } = await db()
+            .from('entities')
+            .select('id')
+            .eq('workspace_id', s.workspaceId)
+            .eq('brand_id', brandId)
+            .eq('kind', 'campaign')
+            .in('id', campaignIds);
+          if (campaignError) throw campaignError;
+          const available = new Set(campaigns?.map((campaign) => campaign.id));
+          if (campaignIds.some((id) => !available.has(id)))
+            throw new PublicRequestError('Imported campaigns must belong to the selected brand.');
+        }
         const mapped = events.map((e) => ({
           workspace_id: s.workspaceId,
           brand_id: brandId,
@@ -810,13 +832,13 @@ export async function POST(
     }
     if (action === 'refresh-insights') {
       editor();
-      if (!brandId) throw new Error('Select a brand.');
+      if (!brandId) throw new PublicRequestError('Select a brand.');
       await dispatch('brand/insights', { workspaceId: s.workspaceId, brandId });
       return Response.json({ queued: true }, { status: 202 });
     }
     if (action === 'delete-customer') {
       owner();
-      if (!brandId) throw new Error('Select a brand.');
+      if (!brandId) throw new PublicRequestError('Select a brand.');
       const customer = z.string().min(1).max(150).parse(body.customerId);
       const { error } = await db().rpc('delete_customer', {
         p_workspace: s.workspaceId,
@@ -832,18 +854,6 @@ export async function POST(
     }
     return Response.json({ error: 'Unknown action.' }, { status: 404 });
   } catch (e) {
-    const error = e as Error & { status?: number };
-    const status = e instanceof z.ZodError ? 400 : (error.status ?? 400);
-    return Response.json(
-      {
-        error:
-          e instanceof z.ZodError
-            ? e.issues
-                .map((i) => `${i.path.join('.')}: ${i.message}`)
-                .join('; ')
-            : error.message || 'Request failed.',
-      },
-      { status },
-    );
+    return apiFailure(e, 'action');
   }
 }

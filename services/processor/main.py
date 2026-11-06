@@ -6,6 +6,7 @@ import os
 import re
 import time
 from uuid import UUID
+from datetime import datetime
 from fastapi import FastAPI, HTTPException, Request
 from attribution import markov, paths_from_events
 from media import database, process_job
@@ -23,11 +24,47 @@ async def verified_body(request):
     async for chunk in request.stream():
         if len(body)+len(chunk)>8_000_000: raise HTTPException(413, 'Payload too large')
         body.extend(chunk)
-    expected=hmac.new(secret.encode(),timestamp.encode()+b'.'+body,hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected,request.headers.get('x-signature','')):
+    signature = request.headers.get('x-signature','')
+    if not re.fullmatch(r'[a-fA-F0-9]{64}', signature):
         raise HTTPException(401, 'Invalid signature')
-    try: return json.loads(body)
-    except (ValueError, UnicodeDecodeError): raise HTTPException(400, 'Invalid JSON')
+    expected=hmac.new(secret.encode(),timestamp.encode()+b'.'+body,hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature.lower()):
+        raise HTTPException(401, 'Invalid signature')
+    try:
+        def invalid_constant(value):
+            raise ValueError('Invalid JSON constant')
+        parsed = json.loads(body, parse_constant=invalid_constant)
+        if not isinstance(parsed, dict): raise ValueError('Expected an object')
+        return parsed
+    except (ValueError, UnicodeDecodeError, RecursionError): raise HTTPException(400, 'Invalid JSON')
+
+def event_time(value):
+    if not isinstance(value, str) or len(value)>40:
+        raise ValueError('Invalid timestamp')
+    parsed=datetime.fromisoformat(value.replace('Z','+00:00'))
+    if parsed.tzinfo is None: raise ValueError('Timestamp must include a timezone')
+    return parsed
+
+def validate_events(events):
+    for event in events:
+        if not isinstance(event,dict): raise ValueError('Invalid event')
+        event_time(event.get('occurred_at'))
+        if event.get('type') not in ('page_view','engaged','click','video_progress','purchase','refund','identify'):
+            raise ValueError('Invalid event type')
+        for name in ('id','journey_id','customer_id','anonymous_id','channel'):
+            value=event.get(name)
+            if value is not None and (not isinstance(value,str) or len(value)>200):
+                raise ValueError('Invalid event field')
+        if not (event.get('journey_id') or event.get('customer_id') or event.get('anonymous_id')):
+            raise ValueError('An event identity is required')
+        if event.get('channel') in ('__start__','__conversion__','__null__'):
+            raise ValueError('Reserved channel name')
+        # Verified monetary/identity events must carry an explicit trusted source.
+        # Browser purchase events are accepted as input but never counted as conversions.
+        if event.get('source') not in (None,'server','import','browser') or (
+            event['type'] in ('purchase','refund','identify') and event.get('source') is None
+        ):
+            raise ValueError('Invalid event source')
 
 @app.get('/health')
 def health(): return {'status':'ok'}
@@ -36,17 +73,23 @@ def health(): return {'status':'ok'}
 async def attribution(request:Request):
     data=await verified_body(request);events=data.get('events',[])
     if not isinstance(events,list) or len(events)>10000: raise HTTPException(400,'At most 10000 events per bounded analysis')
-    lookback=int(data.get('lookbackDays',30))
-    if not 1<=lookback<=365: raise HTTPException(400,'Invalid lookback')
+    lookback=data.get('lookbackDays',30)
+    if type(lookback) is not int or not 1<=lookback<=365: raise HTTPException(400,'Invalid lookback')
     try:
+        validate_events(events)
+        start=event_time(data['periodStart']) if data.get('periodStart') is not None else None
+        end=event_time(data['periodEnd']) if data.get('periodEnd') is not None else None
+        if start and end and start>=end: raise ValueError('Invalid reporting period')
         return await asyncio.to_thread(lambda:markov(paths_from_events(events,lookback,data.get('periodStart'),data.get('periodEnd'))))
-    except (ValueError,KeyError,TypeError):
+    except (ValueError,KeyError,TypeError,AttributeError,OverflowError):
         raise HTTPException(400,'Invalid event or reporting period')
 
 @app.post('/execute-job')
 async def execute_job(request:Request):
     data=await verified_body(request)
-    try: job_id=str(UUID(data.get('jobId','')))
+    raw_job_id=data.get('jobId')
+    if not isinstance(raw_job_id,str): raise HTTPException(400,'Invalid job ID')
+    try: job_id=str(UUID(raw_job_id))
     except (ValueError,TypeError): raise HTTPException(400,'Invalid job ID')
     async with media_slots:
         job=await asyncio.to_thread(database,'POST','rpc/claim_media',{'p_id':job_id})

@@ -1,6 +1,14 @@
 import { z } from 'zod';
 
-/** Never serialize exception messages, provider bodies, or validation input. */
+/** Only deliberate application validation messages may be exposed to callers. */
+export class PublicRequestError extends Error {
+  constructor(message: string, public readonly status = 400) {
+    super(message);
+    this.name = 'PublicRequestError';
+  }
+}
+
+/** Never serialize unexpected exception messages, provider bodies, or input. */
 export function apiFailure(
   error: unknown,
   operation: string,
@@ -31,10 +39,11 @@ export function apiFailure(
     409: ['CONFLICT', 'The record changed. Refresh before retrying.'],
     429: ['RATE_LIMITED', 'Too many requests. Please try again later.'],
   };
-  const [code, message] = messages[status] ?? [
+  const [code, defaultMessage] = messages[status] ?? [
     'UNAVAILABLE',
     'This operation is temporarily unavailable. Please retry.',
   ];
+  const message = error instanceof PublicRequestError ? error.message : defaultMessage;
   if (status >= 500)
     console.error('api_request_failed', { operation, requestId, status });
   return Response.json(

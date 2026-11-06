@@ -1,0 +1,13 @@
+ 'use client';
+import { useState } from 'react';
+import { z } from 'zod';
+const brief = z.object({ idea:z.string().max(6000), audience:z.string().max(1000), scenario:z.string().max(1000), event:z.string().max(500), direction:z.string().max(2000), formats:z.array(z.enum(['image','text','video'])).max(3), targets:z.array(z.enum(['instagram','youtube','x','linkedin','reddit'])).max(5) });
+export type BriefPreset = z.infer<typeof brief>;
+const presets = z.array(z.object({name:z.string().min(1).max(80),brief})).max(12);
+export function BriefPresets({ scope, value, apply }: { scope:string; value:BriefPreset; apply:(v:BriefPreset)=>void }) {
+ const [name,setName]=useState(''); const [notice,setNotice]=useState('');
+ const [items,setItems]=useState<z.infer<typeof presets>>([]);
+ const key='brandcurrent:briefs:v1:'+scope;
+ const load=()=>{try{const parsed=presets.parse(JSON.parse(localStorage.getItem(key)||'[]'));setItems(parsed);setNotice(parsed.length ? '' : 'No saved briefs for this brand.');return parsed;}catch{setNotice('Saved briefs could not be read. Existing data was preserved.');return null;}};
+ return <details className="panel"><summary>Reusable campaign briefs</summary><p className="small muted">Saved in this browser for this workspace and brand. Loading a brief does not start generation, set budgets, or carry approvals.</p><div className="row"><input aria-label="Brief name" maxLength={80} placeholder="Name this brief" value={name} onChange={e=>setName(e.target.value)}/><button type="button" className="secondary-btn" disabled={!name.trim()} onClick={()=>{const existing=load();if(!existing)return;try{const next=presets.parse([...existing.filter(p=>p.name!==name.trim()),{name:name.trim(),brief:value}]);localStorage.setItem(key,JSON.stringify(next));setItems(next);setNotice('Brief saved.');}catch{setNotice('Could not save. Keep at most 12 briefs; existing data was preserved.');}}}>Save brief</button><button type="button" className="secondary-btn" onClick={load}>Load saved briefs</button></div>{items.map((item)=><div className="row spaced" key={item.name}><strong>{item.name}</strong><button type="button" className="secondary-btn" onClick={()=>{apply(item.brief);setNotice('Brief loaded. Check formats, destinations and budget before generating.');}}>Use brief</button><button type="button" className="subtle-link" onClick={()=>{const current=load();if(!current)return;try{const next=current.filter(p=>p.name!==item.name);localStorage.setItem(key,JSON.stringify(next));setItems(next);setNotice('Brief removed.');}catch{setNotice('Could not remove the brief.');}}}>Remove</button></div>)}<output aria-live="polite">{notice}</output></details>;
+}

@@ -34,6 +34,26 @@ class AttributionTests(unittest.TestCase):
         rows = [{'id': '1', 'customer_id': 'a', 'occurred_at': '2026-01-01T00:00:00Z', 'type': 'click', 'channel': 'social'}, {'id': '2', 'customer_id': 'a', 'occurred_at': '2026-03-02T00:00:00Z', 'type': 'purchase', 'source': 'server'}]
         self.assertEqual(paths_from_events(rows), [([], True)])
 
+    def test_mixed_offsets_and_out_of_order_events_use_actual_instants(self):
+        rows = [
+            {'id':'purchase','customer_id':'a','occurred_at':'2026-01-01T10:00:00Z','type':'purchase','source':'server'},
+            {'id':'after','customer_id':'a','occurred_at':'2026-01-01T09:45:00-01:00','type':'click','channel':'email'},
+            {'id':'before','customer_id':'a','occurred_at':'2026-01-01T15:00:00+05:30','type':'click','channel':'social'},
+        ]
+        expected = [(['social'], True), (['email'], False)]
+        self.assertEqual(paths_from_events(rows), expected)
+        self.assertEqual(paths_from_events(list(reversed(rows))), expected)
+
+    def test_fractional_precision_and_equivalent_offsets_keep_stable_order(self):
+        rows = [
+            {'id':'2','anonymous_id':'a','occurred_at':'2026-01-01T10:00:00Z','type':'click','channel':'search'},
+            {'id':'3','anonymous_id':'a','occurred_at':'2026-01-01T10:00:00.900Z','type':'purchase','source':'server'},
+            {'id':'1','anonymous_id':'a','occurred_at':'2026-01-01T15:30:00+05:30','type':'click','channel':'social'},
+        ]
+        expected = [(['social', 'search'], True)]
+        self.assertEqual(paths_from_events(rows), expected)
+        self.assertEqual(paths_from_events(list(reversed(rows))), expected)
+
     def test_window_warmup_does_not_count_old_conversions(self):
         rows = [{'id':'1','customer_id':'a','occurred_at':'2026-01-01T00:00:00Z','type':'click','channel':'social'}, {'id':'2','customer_id':'a','occurred_at':'2026-01-02T00:00:00Z','type':'purchase','source':'server'}, {'id':'3','customer_id':'a','occurred_at':'2026-01-10T00:00:00Z','type':'purchase','source':'server'}]
         self.assertEqual(paths_from_events(rows,30,'2026-01-05T00:00:00Z','2026-02-01T00:00:00Z'), [([], True)])

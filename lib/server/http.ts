@@ -2,8 +2,10 @@ export async function boundedBytes(
   response: Pick<Response, 'headers' | 'body'>,
   maxBytes: number,
 ): Promise<Uint8Array> {
-  if (Number(response.headers.get('content-length')) > maxBytes)
+  if (Number(response.headers.get('content-length')) > maxBytes) {
+    await response.body?.cancel();
     throw new Error('Response exceeds the supported size.');
+  }
   if (!response.body) return new Uint8Array();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];

@@ -1,3 +1,4 @@
+import { apiFailure, PublicRequestError } from '@/lib/server/api-error';
 import { z } from 'zod';
 import { scope, db, rpc, entity } from '@/lib/server/db';
 import { boundedBytes } from '@/lib/server/http';
@@ -67,19 +68,16 @@ export async function GET(request: Request) {
       { headers: { 'Cache-Control': 'private,no-store' } },
     );
   } catch (e) {
-    return Response.json(
-      { error: (e as Error).message },
-      { status: (e as Error & { status?: number }).status ?? 400 },
-    );
+    return apiFailure(e, 'governance-read');
   }
 }
 export async function POST(request: Request) {
   try {
     const s = await scope(request);
     assertRole(s.role, ['owner']);
-    const body = JSON.parse(
+    const body = z.record(z.string(), z.unknown()).parse(JSON.parse(
       new TextDecoder().decode(await boundedBytes(request, 64000)),
-    ) as Record<string, unknown>;
+    ));
     const action = z
       .enum([
         'member',
@@ -139,7 +137,7 @@ export async function POST(request: Request) {
         })
         .parse(body);
       if (p.requireMfa && s.aal !== 'aal2')
-        throw new Error(
+        throw new PublicRequestError(
           'Verify your authenticator in Sign-in settings before enforcing MFA.',
         );
       const { error } = await db()
@@ -182,22 +180,26 @@ export async function POST(request: Request) {
       if(error) throw error;
     }
     if (action === 'retry-job') {
-      const id = z.string().max(250).parse(body.id);
-      const { data } = await db()
+      const id = z.string().min(1).max(250).parse(body.id);
+      const { data, error: lookupError } = await db()
         .from('workflow_outbox')
         .select('data')
         .eq('id', id)
-        .single();
-      if (data?.data.workspaceId !== s.workspaceId)
-        throw new Error('Job scope denied');
-      await db()
+        .eq('data->>workspaceId', s.workspaceId)
+        .maybeSingle();
+      if (lookupError) throw lookupError;
+      if (data?.data?.workspaceId !== s.workspaceId)
+        throw new PublicRequestError('The requested job is unavailable.', 404);
+      const { error: retryError } = await db()
         .from('workflow_outbox')
         .update({
           attempts: 0,
           dead_at: null,
           next_attempt_at: new Date().toISOString(),
         })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('data->>workspaceId', s.workspaceId);
+      if (retryError) throw retryError;
     }
     const { error } = await db()
       .from('audit_log')
@@ -211,9 +213,6 @@ export async function POST(request: Request) {
     if (error) throw error;
     return Response.json({ saved: true });
   } catch (e) {
-    return Response.json(
-      { error: (e as Error).message },
-      { status: (e as Error & { status?: number }).status ?? 400 },
-    );
+    return apiFailure(e, 'governance-write');
   }
 }

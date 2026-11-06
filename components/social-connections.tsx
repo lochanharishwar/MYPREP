@@ -99,6 +99,7 @@ export function SocialConnections() {
                   <p className="small muted">{item.formats}</p>
                 </div>
               </div>
+              {!config.backgroundReady && <p className="small amber">Automatic posting needs the background service.</p>}
               <p className="small muted social-channel-detail">
                 {item.analytics}
               </p>
@@ -108,8 +109,9 @@ export function SocialConnections() {
                   <div className="social-account" key={a.id}>
                     <strong>{a.payload.name}</strong>
                     <span className={`small ${expired ? 'amber' : 'green'}`}>
-                      {expired ? 'Reconnect to check access' : 'Authorized'}
+                      {expired ? 'Needs permission — reconnect' : 'Connected'}
                     </span>
+                    {a.payload.expiresAt && <p className="small muted">Access token expiry: {new Date(a.payload.expiresAt).toLocaleString()}. The server refreshes supported tokens; reconnect if access is rejected.</p>}
                     {a.payload.destination && (
                       <span className="small muted">
                         {a.payload.destination}

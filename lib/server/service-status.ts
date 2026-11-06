@@ -37,8 +37,8 @@ export const serviceStatus = () => [
   },
   {
     name: 'Website discovery',
-    ready: !!env('FIRECRAWL_API_KEY') && !!env('BROWSERLESS_API_KEY'),
-    detail: 'Firecrawl and Browserless',
+    ready: !!env('FIRECRAWL_API_KEY') && !!env('BROWSERLESS_API_KEY') && env('BROWSERLESS_EGRESS_PROTECTED') === 'true',
+    detail: 'Firecrawl and Browserless credentials plus verified browser network isolation are required for advanced discovery. Basic HTML scans remain available.',
   },
   {
     name: 'Generation & review',

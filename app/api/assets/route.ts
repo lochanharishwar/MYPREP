@@ -1,3 +1,4 @@
+import { apiFailure, PublicRequestError } from '@/lib/server/api-error';
 import { z } from 'zod';
 import { scope, db, storeAsset } from '@/lib/server/db';
 import { assertRole } from '@/lib/domain';
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
           ? 'image/webp'
           : null;
     if (!mime)
-      throw new Error(
+      throw new PublicRequestError(
         'Upload an original PNG, JPEG or WebP image, up to 8 MB. SVG files require a reviewed raster export.',
       );
     const path = await storeAsset(s.workspaceId, brandId, bytes, mime);
@@ -67,9 +68,6 @@ export async function POST(request: Request) {
     }
     return Response.json({ id: data }, { status: 201 });
   } catch (e) {
-    return Response.json(
-      { error: (e as Error).message },
-      { status: (e as Error & { status?: number }).status ?? 400 },
-    );
+    return apiFailure(e, 'asset-upload');
   }
 }

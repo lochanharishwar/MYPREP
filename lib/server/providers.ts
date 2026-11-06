@@ -7,6 +7,7 @@ import { reserve, type BillingContext } from './billing';
 import { normalizeUrl } from '../domain';
 import { assetUrl, storeAsset, rpc } from './db';
 import { sign, validatePublicUrl } from './security';
+import { browserRequestGuard } from './browser-request-guard';
 export async function providerJSON<T = Record<string, unknown>>(
   url: string,
   init: RequestInit = {},
@@ -203,9 +204,11 @@ export async function styles(
   ctx: BillingContext,
   url: string,
 ): Promise<StyleSnapshot> {
+  if (env('BROWSERLESS_EGRESS_PROTECTED') !== 'true')
+    throw new Error('Rendered website scanning requires Browserless network protection. Configure an isolated browser with private and reserved destination ranges blocked before enabling it. Basic HTML scanning remains available.');
   await validatePublicUrl(url);
   await reserve(ctx, 'BROWSER');
-  const code = `export default async function({page,context}) { await page.setRequestInterception(true);page.on('request',request=>{try{const u=new URL(request.url());const h=u.hostname;if(!['http:','https:','data:','blob:'].includes(u.protocol)||h==='localhost'||h.endsWith('.local')||h.endsWith('.internal')||/^(127\\.|10\\.|192\\.168\\.|169\\.254\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.)/.test(h)){request.abort();return;}request.continue();}catch{request.abort()}});await page.goto(context.url,{waitUntil:'networkidle2',timeout:45000});const data=await page.evaluate(()=>{const colorMap=new Map();const fonts=new Set();const nodes=[...document.querySelectorAll('*')];nodes.slice(0,15000).forEach(el=>{const s=getComputedStyle(el);fonts.add(s.fontFamily);for(const key of ['color','backgroundColor','borderTopColor','borderRightColor','borderBottomColor','borderLeftColor','fill','stroke']){let v=s[key];if(!v||v==='none'||v==='rgba(0, 0, 0, 0)')continue;const rgb=v.match(/^rgb\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\)$/);if(rgb)v='#'+rgb.slice(1).map(n=>Number(n).toString(16).padStart(2,'0')).join('');const selector=el.id?'#'+el.id:el.tagName.toLowerCase()+(el.classList.length?'.'+[...el.classList].slice(0,2).join('.'): '');const k=v+'|'+selector;const previous=colorMap.get(k);colorMap.set(k,{value:v,selector,count:(previous?.count||0)+1,url:location.href,method:'computed-style'})}});return {name:document.querySelector('meta[property="og:site_name"]')?.content||'',title:document.title,taglines:[...document.querySelectorAll('h1,[class*="tagline"],[id*="tagline"]')].map(e=>e.textContent.trim()).filter(Boolean),logos:[...document.images].filter(e=>/logo/i.test(e.alt+' '+e.className+' '+e.src)).map(e=>e.currentSrc||e.src),fonts:[...fonts],colors:[...colorMap.values()],headings:[...document.querySelectorAll('h1,h2,h3')].map(e=>e.textContent.trim()),description:document.querySelector('meta[name="description"]')?.content||'',canonical:document.querySelector('link[rel="canonical"]')?.href||'',truncated:nodes.length>15000}});return {data,type:'application/json'};}`;
+  const code = `export default async function({page,context}) { ${browserRequestGuard()}await page.goto(context.url,{waitUntil:'networkidle2',timeout:45000});const data=await page.evaluate(()=>{const colorMap=new Map();const fonts=new Set();const nodes=[...document.querySelectorAll('*')];nodes.slice(0,15000).forEach(el=>{const s=getComputedStyle(el);fonts.add(s.fontFamily);for(const key of ['color','backgroundColor','borderTopColor','borderRightColor','borderBottomColor','borderLeftColor','fill','stroke']){let v=s[key];if(!v||v==='none'||v==='rgba(0, 0, 0, 0)')continue;const rgb=v.match(/^rgb\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\)$/);if(rgb)v='#'+rgb.slice(1).map(n=>Number(n).toString(16).padStart(2,'0')).join('');const selector=el.id?'#'+el.id:el.tagName.toLowerCase()+(el.classList.length?'.'+[...el.classList].slice(0,2).join('.'): '');const k=v+'|'+selector;const previous=colorMap.get(k);colorMap.set(k,{value:v,selector,count:(previous?.count||0)+1,url:location.href,method:'computed-style'})}});return {name:document.querySelector('meta[property="og:site_name"]')?.content||'',title:document.title,taglines:[...document.querySelectorAll('h1,[class*="tagline"],[id*="tagline"]')].map(e=>e.textContent.trim()).filter(Boolean),logos:[...document.images].filter(e=>/logo/i.test(e.alt+' '+e.className+' '+e.src)).map(e=>e.currentSrc||e.src),fonts:[...fonts],colors:[...colorMap.values()],headings:[...document.querySelectorAll('h1,h2,h3')].map(e=>e.textContent.trim()),description:document.querySelector('meta[name="description"]')?.content||'',canonical:document.querySelector('link[rel="canonical"]')?.href||'',truncated:nodes.length>15000}});return {data,type:'application/json'};}`;
   return providerJSON<StyleSnapshot>(
     `${env('BROWSERLESS_URL', 'https://production-sfo.browserless.io')}/function?token=${encodeURIComponent(required('BROWSERLESS_API_KEY'))}`,
     {
@@ -235,15 +238,13 @@ export async function visualStyleFallback(
 ): Promise<StyleSnapshot> {
   if (!page.screenshot)
     throw new Error('No screenshot is available for visual fallback.');
-  await validatePublicUrl(page.screenshot);
-  const r = await fetch(page.screenshot, {
-    redirect: 'manual',
-    signal: AbortSignal.timeout(30000),
-  });
-  if (!r.ok) throw new Error('Screenshot unavailable.');
-  const bytes = await boundedBytes(r, 18000000);
-  if (bytes.length > 10000000)
-    throw new Error('Screenshot is too large for visual analysis.');
+  const { response: r } = await publicFetch(page.screenshot, 30000);
+  const mimeType = r.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+  if (!mimeType || !['image/png', 'image/jpeg', 'image/webp'].includes(mimeType)) {
+    await r.body?.cancel();
+    throw new Error('Screenshot must be a PNG, JPEG or WebP image.');
+  }
+  const bytes = await boundedBytes(r, 10000000);
   const result = await gemini<{
     colors: string[];
     fontDescriptions: string[];
@@ -254,7 +255,7 @@ export async function visualStyleFallback(
     [
       {
         inlineData: {
-          mimeType: r.headers.get('content-type')?.split(';')[0] ?? 'image/png',
+          mimeType,
           data: Buffer.from(bytes).toString('base64'),
         },
       },

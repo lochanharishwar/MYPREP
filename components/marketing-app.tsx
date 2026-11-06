@@ -1,4 +1,5 @@
 'use client';
+import { CampaignProgress } from './campaign-progress';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -602,6 +603,7 @@ function Shell({ page }: { page: Page }) {
               stored; reports use server data.
             </p>
           )}
+        <CampaignProgress />
         {page === 'dashboard' ? (
           <Dashboard />
         ) : page === 'brand-dna' ? (
