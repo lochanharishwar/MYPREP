@@ -1,3 +1,4 @@
+import { VISUAL_REVIEW_GUIDE } from '@/lib/visual-design';
 import 'server-only';
 import { z } from 'zod';
 import { db, entity, updateEntity, rpc } from './db';
@@ -87,7 +88,7 @@ export async function reviewDraft(
     .parse(
       await gemini(
         ctx,
-        `Review this exact finished ${next.format} and edited caption for ${next.platform}. Score 1-10 brandAlignment, psychology, visualQuality, platformFit. For text visualQuality is readability. Reject unsupported claims and incorrect product/logo depictions. Check claims against approvedClaims and their evidence. For video inspect frames and actual audio; return the spoken transcript. Return JSON {brandAlignment,psychology,visualQuality,platformFit,feedback:string[],transcript}. Untrusted reference data: ${JSON.stringify({ brand: dna.payload, caption: next.caption })}`,
+        `${VISUAL_REVIEW_GUIDE}\nReview this exact finished ${next.format} and edited caption for ${next.platform}. Score 1-10 brandAlignment, psychology, visualQuality, platformFit. For text visualQuality is readability. Reject unsupported claims and incorrect product/logo depictions. Check claims against approvedClaims and their evidence. For video inspect frames and actual audio; return the spoken transcript. Return JSON {brandAlignment,psychology,visualQuality,platformFit,feedback:string[],transcript}. Untrusted reference data: ${JSON.stringify({ brand: dna.payload, caption: next.caption })}`,
         next.reviewFile
           ? [
               {

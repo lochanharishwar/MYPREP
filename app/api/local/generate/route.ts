@@ -1,3 +1,4 @@
+import { VISUAL_REVIEW_GUIDE } from '@/lib/visual-design';
 import { z } from 'zod';
 import { campaignSchema } from '@/lib/contracts';
 import { reviewScore } from '@/lib/domain';
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
         : null;
     assertRequestActive(request);
     const raw = await geminiText(
-      `${context}\nReview the actual finished caption and any attached finished image. Caption: ${caption}\nGrade each criterion 1–10: brandAlignment, psychology, visualQuality, platformFit. For text visualQuality means readability. Return JSON with those numeric fields and feedback:string[] of specific corrections. Unsupported claims or missing product fidelity must lower scores.`,
+      `${context}\n${VISUAL_REVIEW_GUIDE}\nReview the actual finished caption and any attached finished image. Caption: ${caption}\nGrade each criterion 1–10: brandAlignment, psychology, visualQuality, platformFit. For text visualQuality means readability. Return JSON with those numeric fields and feedback:string[] of specific corrections. Unsupported claims or missing product fidelity must lower scores.`,
       image ? [{ inlineData: image }] : [],
       true,
       true,

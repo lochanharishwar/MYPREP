@@ -1,3 +1,4 @@
+import { VISUAL_REVIEW_GUIDE } from '@/lib/visual-design';
 import 'server-only';
 import { Inngest } from 'inngest';
 import { z } from 'zod';
@@ -664,7 +665,7 @@ export const generationWorkflow = inngest.createFunction(
               const raw = rubric.parse(
                 await gemini(
                   ctx,
-                  `Review the actual attached finished ${format} and caption for ${platform}, independently from its creator. For videos inspect image sequence and audible claims. Include a transcript field containing the exact spoken words, or an empty string if no speech. Never substitute script text for the audible transcript. Score 1–10 (never 1–100): brandAlignment 35%, psychology 25%, visualQuality 20%, platformFit 20%. For text visualQuality means readability/presentation. Return JSON {brandAlignment,psychology,visualQuality,platformFit,feedback:string[]}. Be strict about incorrect logos, unsupported product claims, incoherent anatomy, unreadable text and platform suitability. Give specific diffs.\n${JSON.stringify({ brand: dna.payload, caption: script.caption, brief: campaign.payload })}`,
+                  `${VISUAL_REVIEW_GUIDE}\nReview the actual attached finished ${format} and caption for ${platform}, independently from its creator. For videos inspect image sequence and audible claims. Include a transcript field containing the exact spoken words, or an empty string if no speech. Never substitute script text for the audible transcript. Score 1–10 (never 1–100): brandAlignment 35%, psychology 25%, visualQuality 20%, platformFit 20%. For text visualQuality means readability/presentation. Return JSON {brandAlignment,psychology,visualQuality,platformFit,feedback:string[]}. Be strict about incorrect logos, unsupported product claims, incoherent anatomy, unreadable text and platform suitability. Give specific diffs.\n${JSON.stringify({ brand: dna.payload, caption: script.caption, brief: campaign.payload })}`,
                   mediaParts,
                   true,
                   'review',

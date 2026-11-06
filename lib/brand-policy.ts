@@ -52,8 +52,8 @@ export function checkBrandCopy(caption: string, policy?: BrandPolicy) {
       throw new Error(`Required disclaimer missing: ${phrase}`);
 }
 export const AI_VERSIONS = {
-  generationPrompt: 'creative-2',
-  reviewPrompt: 'finished-media-2',
+  generationPrompt: 'creative-3-design-1',
+  reviewPrompt: 'finished-media-3-design-1',
   rubric: 'weighted-35-25-20-20-v1',
   policy: 'brand-policy-1',
 } as const;

@@ -191,3 +191,18 @@ describe('local Gemini spending bounds (mocked provider transport)', () => {
     });
   });
 });
+
+it('applies the visual guide to image requests without replacing the brief or requesting extra images', async () => {
+ fixtureEnv();
+ const bodies: Record<string, any>[] = [];
+ vi.stubGlobal('fetch', vi.fn(async (_url:string, init:RequestInit) => {
+   bodies.push(JSON.parse(String(init.body)));
+   return answer([{inlineData:{mimeType:'image/png',data:'Zml4dHVyZQ=='}}]);
+ }));
+ await geminiImage('Use the supplied blue product in a minimal studio.', [], '4:5');
+ expect(bodies).toHaveLength(1);
+ expect(bodies[0].systemInstruction.parts[0].text).toContain('visual-design-1');
+ expect(bodies[0].systemInstruction.parts[0].text).toContain('never invent logos');
+ expect(bodies[0].contents[0].parts[0].text).toBe('Use the supplied blue product in a minimal studio.');
+ expect(bodies[0].generationConfig.imageConfig.aspectRatio).toBe('4:5');
+});

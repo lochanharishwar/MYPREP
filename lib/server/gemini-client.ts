@@ -1,3 +1,4 @@
+import { VISUAL_DESIGN_GUIDE } from '../visual-design';
 import { z } from 'zod';
 import { env, required } from './env';
 import { boundedBytes } from './http';
@@ -259,7 +260,7 @@ export async function geminiImage(
   assertGenerationActive(signal);
   const model = env('GEMINI_IMAGE_MODEL', 'gemini-3-pro-image');
   const body = {
-    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    systemInstruction: { parts: [{ text: SYSTEM_PROMPT + "\n" + VISUAL_DESIGN_GUIDE }] },
     contents: [{ role: 'user', parts: [{ text: prompt }, ...parts] }],
     generationConfig: {
       responseModalities: ['TEXT', 'IMAGE'],
