@@ -136,7 +136,7 @@ async function tokenRequest(
   });
   const headers: Record<string, string> = {
     'content-type': 'application/x-www-form-urlencoded',
-    'user-agent': env('REDDIT_USER_AGENT', 'BrandCurrent/1.0'),
+    'user-agent': env('REDDIT_USER_AGENT', 'MARKY/1.0'),
   };
   if (platform === 'x' || platform === 'reddit')
     headers.authorization =
@@ -183,7 +183,7 @@ export async function exchange(
 export async function identity(platform: Platform, token: string) {
   const h = {
     authorization: `Bearer ${token}`,
-    'user-agent': env('REDDIT_USER_AGENT', 'BrandCurrent/1.0'),
+    'user-agent': env('REDDIT_USER_AGENT', 'MARKY/1.0'),
   };
   if (platform === 'instagram') {
     const d = await providerJSON<{
@@ -311,7 +311,7 @@ function headers(platform: Platform, token: string) {
         }
       : {}),
     ...(platform === 'reddit'
-      ? { 'user-agent': env('REDDIT_USER_AGENT', 'BrandCurrent/1.0') }
+      ? { 'user-agent': env('REDDIT_USER_AGENT', 'MARKY/1.0') }
       : {}),
   };
 }

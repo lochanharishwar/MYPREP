@@ -13,3 +13,16 @@ export const VISUAL_DESIGN_SOURCES = [
  'https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html',
  'https://deepmind.google/models/gemini-image/prompt-guide/',
 ];
+
+export const DESIGN_STARTERS = [
+ { name: 'Product in use', direction: 'Show the product in a believable everyday use scene. Use natural light, a clear product focal point and an uncluttered environment.' },
+ { name: 'Minimal studio', direction: 'Use a restrained studio composition, deliberate negative space, controlled lighting and faithful product materials. Keep the product dominant.' },
+ { name: 'Illustrated campaign', direction: 'Use a modern editorial illustration with clear silhouettes and a limited brand-led palette. Keep the use case central; preserve any provided product reference.' },
+ { name: 'Bold editorial', direction: 'Use a confident editorial composition with purposeful asymmetry and strong focal contrast. Keep supporting elements quiet and leave room for approved copy.' },
+] as const;
+export function appendDesignDirection(current: string, addition: string) {
+ if (current.includes(addition)) return current;
+ const next = [current.trim(), addition].filter(Boolean).join('\n');
+ if (next.length > 2000) throw new Error('Shorten your creative direction before adding this style. The limit is 2,000 characters.');
+ return next;
+}

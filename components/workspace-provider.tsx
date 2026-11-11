@@ -845,8 +845,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
                     ? config.generation.imageModel
                     : config.generation.model,
                 reviewModel: config.generation.reviewModel,
-                generationPrompt: 'local-creative-3',
-                reviewPrompt: 'finished-media-3',
+                generationPrompt: 'local-creative-4-design-1',
+                reviewPrompt: 'finished-media-4-design-1',
                 rubric: 'weighted-35-25-20-20-v1',
                 policy: 'observed-facts',
                 dnaVersion: Number(dna.payload.version),

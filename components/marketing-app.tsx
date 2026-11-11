@@ -498,7 +498,7 @@ function Shell({ page }: { page: Page }) {
           <span className="mark">
             <Waves size={23} />
           </span>
-          brandcurrent<span className="muted small">/</span>
+          MARKY<span className="muted small">/</span>
           <span className="muted small">
             {w.state.workspace?.name ?? 'Workspace'}
           </span>

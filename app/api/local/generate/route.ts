@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     const image =
       format === 'image'
         ? await geminiImage(
-            `${context}\nCreate a finished realistic product-use photograph for this brief. Keep the product central. Follow the user's specific creative direction. Use an adult Indian woman only where relevant. Use the attached reference to preserve product appearance; without a reference do not invent precise packaging or logos. No unsupported text claims.`,
+            `${context}\nCreate a finished campaign image for this brief. Use realistic product-use photography only when no alternative visual style is requested. Keep the product central. Follow the user's specific creative direction. Use an adult Indian woman only where relevant. Use the attached reference to preserve product appearance; without a reference do not invent precise packaging or logos. No unsupported text claims.`,
             body.referenceUrl ? [body.referenceUrl] : [],
             platform === 'instagram' ? '4:5' : '1:1',
             true,

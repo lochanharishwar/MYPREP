@@ -292,6 +292,8 @@ describe('Real image generation contract (mocked provider transport)', () => {
       'Natural daylight',
     );
     expect(requests[2].body.contents[0].parts[1].inlineData).toEqual(image);
+    expect(requests[2].body.contents[0].parts[0].text).toContain('Design review visual-design-1');
+    expect(requests[1].body.contents[0].parts[0].text).toContain('only when no alternative visual style is requested');
     expect(requests[2].body.contents[0].parts[0].text).toContain(
       'A bicycle for your daily commute.',
     );

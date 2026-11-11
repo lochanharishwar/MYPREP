@@ -1,4 +1,4 @@
-/* BrandCurrent first-party tracking. Load only after your site's consent requirements are satisfied. */
+/* MARKY first-party tracking. Load only after your site's consent requirements are satisfied. */
 (() => {
   const script = document.currentScript;
   const trackingId = script?.dataset.key;

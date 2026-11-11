@@ -48,7 +48,7 @@ export function CustomerExport() {
                   ),
                   a = document.createElement('a');
                 a.href = url;
-                a.download = 'brandcurrent-' + kind + '.csv';
+                a.download = 'marky-' + kind + '.csv';
                 a.click();
                 setTimeout(() => URL.revokeObjectURL(url), 1000);
                 setCursor(r.nextCursor ?? '');

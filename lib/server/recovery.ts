@@ -108,7 +108,7 @@ export async function reconcilePublication(
       {
         headers: {
           ...h,
-          'user-agent': env('REDDIT_USER_AGENT', 'BrandCurrent/1.0'),
+          'user-agent': env('REDDIT_USER_AGENT', 'MARKY/1.0'),
         },
       },
     );

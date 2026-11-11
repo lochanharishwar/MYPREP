@@ -9,7 +9,7 @@ export async function publicFetch(raw: string, timeout = 15000) {
       redirect: 'manual',
       signal,
       headers: {
-        'user-agent': 'BrandCurrent/1.0 website analysis',
+        'user-agent': 'MARKY/1.0 website analysis',
         accept:
           'text/html,application/xhtml+xml,text/css,image/*;q=0.8,*/*;q=0.5',
       },

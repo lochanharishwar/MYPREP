@@ -63,7 +63,7 @@ export function IdentityControls() {
                 }
                 const enrollment = await w.client!.auth.mfa.enroll({
                   factorType: 'totp',
-                  friendlyName: 'BrandCurrent',
+                  friendlyName: 'MARKY',
                 });
                 if (enrollment.error) throw enrollment.error;
                 setFactor(enrollment.data.id);

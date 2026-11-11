@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'BrandCurrent — Your marketing, in motion',
+  title: 'MARKY — Your marketing, in motion',
   description:
     'A private workspace for brand intelligence, content, publishing and attribution.',
 };

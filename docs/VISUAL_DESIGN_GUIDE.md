@@ -12,3 +12,8 @@ The versioned guide in lib/visual-design.ts is added to the system instruction f
 
 ## Limits and evaluation
 No collection can contain all design rules or establish what everyone finds attractive. These principles support legibility and intentional composition. Advertising effectiveness must be measured with consenting audiences and actual campaign results. No paid generation or fine-tuning was performed because paid tests remain disabled. A future visual evaluation should compare a fixed set of authorized product briefs and references, with blinded human ratings and measured text legibility before making quality claims.
+
+## Studio follow-up — 11 November 2026
+Content Studio now exposes the guide and its sources when image is selected. Four optional style starters append to the existing direction without silently removing constraints; oversized input is rejected and repeated selections do not duplicate text. Local generation now uses photography as a fallback rather than an unconditional instruction. New local results record design-aware prompt versions. Existing saved content remains unchanged.
+
+The app display name is now MARKY. Stable database, storage and workflow identifiers retain their original names for compatibility. Hosting assigned https://marky.lochanharishwar.chatgpt.site/; the requested account-free hostname was not assigned by the slug tool. Browser-only data is scoped by origin, so a new hostname does not automatically receive drafts stored under the old hostname. No local browser data was deleted or migrated.

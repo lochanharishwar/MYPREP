@@ -1,4 +1,5 @@
 'use client';
+import { DesignGuidance } from './design-guidance';
 import { BriefPresets, type BriefPreset } from './brief-presets';
 import { ActivationNotice } from './activation-notice';
 import {
@@ -662,6 +663,7 @@ export function ContentView() {
   return (
     <div className="stack content-studio">
       <BriefPresets key={w.workspaceId + ':' + w.brandId} scope={w.workspaceId + ':' + w.brandId} value={{idea,audience,scenario,event,direction,formats,targets} as BriefPreset} apply={v=>{setIdea(v.idea);setAudience(v.audience);setScenario(v.scenario);setEvent(v.event);setDirection(v.direction);setFormats(v.formats);setTargets(v.targets);}} />
+      {formats.includes('image') && <DesignGuidance key={w.brandId} direction={direction} onChange={setDirection} />}
       <section className="panel glass studio-compose">
         <ActivationNotice feature="generation" />
         <div className="section-title studio-heading">
@@ -827,6 +829,7 @@ export function ContentView() {
                     Creative direction
                     <input
                       value={direction}
+                      maxLength={2000}
                       onChange={(e) => setDirection(e.target.value)}
                       placeholder="Style, casting, language, or references"
                     />

@@ -7,7 +7,7 @@ if (-not (Test-Path -LiteralPath 'node_modules/vinext')) {
   & npm.cmd ci
   if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
 }
-Write-Host 'BrandCurrent starts with no app login or signup. Open the Local URL printed below.'
+Write-Host 'MARKY starts with no app login or signup. Open the Local URL printed below.'
 Write-Host 'The preferred port is 3000. If it is busy, the server may choose another port.'
 Write-Host 'Use the same browser and exact Local URL to return to your saved workspace.'
 Write-Host 'Keep this terminal open. Press Ctrl+C to stop the local server.'
