@@ -45,6 +45,16 @@ describe('public website network boundaries', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('x'.repeat(64001))));
     await expect(validatePublicUrl('https://example.com')).rejects.toThrow('size');
   });
+  it('rejects DNS redirects without following the destination on the edge runtime', async () => {
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.redirect === 'error') throw new TypeError('Invalid redirect value');
+      expect(init?.redirect).toBe('manual');
+      return new Response(null, { status: 302, headers: { location: 'https://untrusted.example/dns' } });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    await expect(validatePublicUrl('https://example.com')).rejects.toThrow('Unable to verify');
+    expect(fetcher.mock.calls.every(([url]) => url.startsWith('https://cloudflare-dns.com/dns-query?'))).toBe(true);
+  });
   it('rejects unsafe redirect destinations without fetching them', async () => {
     const fetcher = vi.fn(async (url: string) => url.includes('dns-query')
       ? Response.json({ Status: 0, Answer: [{ type: 1, data: '8.8.8.8' }] })

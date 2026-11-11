@@ -24,6 +24,25 @@ const dns = (url: string) =>
       : [{ type: 1, data: '93.184.216.34' }],
   });
 describe('Accurate website observations and scan recovery', () => {
+  it('returns sourced findings through the public reader under Workers redirect restrictions', async () => {
+    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.redirect === 'error') throw new TypeError('Invalid redirect value');
+      expect(init?.redirect).toBe('manual');
+      if (url.includes('dns-query')) return dns(url);
+      if (url.startsWith('https://r.jina.ai/')) return Response.json({ code: 200, data: {
+        url: 'https://example.com', title: 'Example tools',
+        content: 'We build durable tools for gardeners. Our tools use replaceable handles and come with repair instructions.',
+      } });
+      return new Response(null, { status: 403 });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const result = await crawlWebsite('https://example.com');
+    expect(result.scan.completed).toContain('https://example.com');
+    expect(result.scan.error).toBeNull();
+    expect(result.dna.overview.some(f => f.text.includes('durable tools'))).toBe(true);
+    expect(result.dna.evidence.some(e => e.url === 'https://example.com')).toBe(true);
+    expect(fetcher.mock.calls.some(([url]) => url.startsWith('https://r.jina.ai/'))).toBe(true);
+  });
   it('preserves meaningful path slashes when following website redirects', async () => {
     vi.stubGlobal(
       'fetch',

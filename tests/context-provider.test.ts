@@ -38,7 +38,7 @@ describe('Context.dev integration without live credit use', () => {
     expect(vi.mocked(reserve).mock.invocationCallOrder[0]).toBeLessThan(fetcher.mock.invocationCallOrder[0]);
     const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://api.context.dev/v1/web/scrape');
-    expect(init.redirect).toBe('error');
+    expect(init.redirect).toBe('manual');
     expect(init.headers).toMatchObject({ Authorization: 'Bearer fixture-private-context-key' });
     expect(JSON.parse(String(init.body))).toMatchObject({ url: source, formats: { html: true, markdown: true }, sharedParams: { mainContentOnly: false } });
     expect(result.links).toContain('https://example.com/about');
@@ -93,7 +93,7 @@ describe('Context.dev integration without live credit use', () => {
     transport(response({ metadata: { finalUrl: 'https://other.example/' } }));
     await expect(contextScrape(ctx, source)).rejects.toThrow('different website');
   });
-  it.each([401, 402, 429, 500])('reports status %s without leaking provider body or retrying', async status => {
+  it.each([301, 302, 303, 307, 308, 401, 402, 429, 500])('reports status %s without leaking provider body or retrying', async status => {
     const fetcher = transport({ error: 'fixture-private-context-key' }, status);
     await expect(contextScrape(ctx, source)).rejects.toThrow(`(${status})`);
     expect(fetcher).toHaveBeenCalledTimes(1);

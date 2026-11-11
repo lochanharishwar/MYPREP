@@ -10,7 +10,9 @@ export async function validatePublicUrl(raw: string) {
   const host = new URL(url).hostname.replace(/\.$/, '');
   const answers = await Promise.all(['A', 'AAAA'].map(async (type) => {
     const response = await fetch('https://cloudflare-dns.com/dns-query?name=' + encodeURIComponent(host) + '&type=' + type, {
-      redirect: 'error',
+      // Workers does not implement redirect: 'error'. Manual plus the !ok
+      // check rejects redirects without following an untrusted destination.
+      redirect: 'manual',
       headers: { accept: 'application/dns-json' }, signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) {

@@ -158,7 +158,7 @@ async function readerFallback(url: string): Promise<Observation> {
       'x-with-generated-alt': 'false',
     },
     signal: AbortSignal.timeout(18000),
-    redirect: 'error',
+    redirect: 'manual',
   });
   if (!response.ok) {
     await response.body?.cancel();

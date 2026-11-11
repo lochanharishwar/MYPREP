@@ -342,9 +342,12 @@ async function uploadBytes(
     method: 'PUT',
     headers: extra,
     body: bytes as BodyInit,
-    redirect: 'error',
+    redirect: 'manual',
   });
-  if (!r.ok) throw new Error(`Media upload failed (${r.status}).`);
+  if (!r.ok) {
+    await r.body?.cancel();
+    throw new Error(`Media upload failed (${r.status}).`);
+  }
   return r;
 }
 export async function upload(

@@ -31,7 +31,7 @@ async function request(ctx: BillingContext, operation: 'MAP' | 'SCRAPE' | 'SEARC
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(65000),
-      redirect: 'error',
+      redirect: 'manual',
     });
   } catch {
     // An uncertain timeout is not automatically replayed inside the adapter.
