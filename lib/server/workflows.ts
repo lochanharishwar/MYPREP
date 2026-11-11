@@ -12,6 +12,7 @@ import {
   scrape,
   styles,
   visualStyleFallback,
+  htmlStyleFallback,
   gemini,
   research,
   generateImage,
@@ -140,6 +141,7 @@ interface Scan {
   error?: string;
   agent: number;
   discovered: number;
+  discoveryPartial?: boolean;
 }
 const finding = z.object({
   text: z.string().max(2000),
@@ -176,11 +178,14 @@ export const scanWorkflow = inngest.createFunction(
       return { status: state.status };
     try {
       if (!state.queue.length && !state.completed.length) {
-        const urls = await step.run('discover', () => discover(ctx, state.url));
+        const discovery = await step.run('discover', () => discover(ctx, state.url));
+        // Old durable runs may have already persisted the former array result.
+        const urls = Array.isArray(discovery) ? discovery : discovery.urls;
         state = {
           ...state,
           queue: urls,
           discovered: urls.length,
+          discoveryPartial: Array.isArray(discovery) ? false : discovery.partial,
           status: 'running',
           agent: 1,
         };
@@ -195,10 +200,9 @@ export const scanWorkflow = inngest.createFunction(
             try {
               page.styles = await styles(ctx, url);
             } catch (e) {
-              page.error =
-                'Rendered-style extraction unavailable: ' + textError(e);
+              page.error = [page.error, 'Rendered-style extraction unavailable: ' + textError(e)].filter(Boolean).join('; ');
               try {
-                page.styles = await visualStyleFallback(ctx, page);
+                page.styles = page.html ? htmlStyleFallback(page) : await visualStyleFallback(ctx, page);
               } catch (fallbackError) {
                 page.error += '; visual fallback: ' + textError(fallbackError);
               }
@@ -427,6 +431,7 @@ export const scanWorkflow = inngest.createFunction(
             failed: state.failed.length,
             excluded: state.excluded.length,
             status:
+              state.discoveryPartial ||
               state.failed.length ||
               p.some(
                 (x) =>

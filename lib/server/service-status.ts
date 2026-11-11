@@ -1,6 +1,22 @@
 import 'server-only';
 import { env } from './env';
 import { storageBuckets } from './storage';
+import { scrapingProvider } from './context-client';
+
+function discoveryStatus() {
+  try {
+    const context = scrapingProvider() === 'context';
+    const key = context ? 'CONTEXT_DEV_API_KEY' : 'FIRECRAWL_API_KEY';
+    const costs = context ? ['COST_CONTEXT_MAP', 'COST_CONTEXT_SCRAPE'] : ['COST_MAP', 'COST_SCRAPE'];
+    const missing = [key, ...costs, 'SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'INNGEST_EVENT_KEY', 'INNGEST_SIGNING_KEY', 'GEMINI_API_KEY', 'COST_TEXT'].filter(name => name.startsWith('COST_') ? !(Number(env(name)) > 0 && Number.isFinite(Number(env(name)))) : !env(name));
+    return {
+      name: 'Website discovery', ready: missing.length === 0,
+      detail: `${context ? 'Context.dev' : 'Firecrawl'} selected${env(key) ? '; key configured' : '; key missing'}. ${missing.length ? 'Advanced scans need: ' + missing.join(', ') + '. ' : 'Server settings configured; access and workspace spending limits are checked when a scan starts. '}Public browser scans remain the free HTML reader. Rendered colors require Browserless; HTML-only styles are labeled partial.`,
+    };
+  } catch {
+    return { name: 'Website discovery', ready: false, detail: 'Set SCRAPING_PROVIDER to context or firecrawl. Basic HTML scans remain available.' };
+  }
+}
 
 function storageConfigurationError() {
   try {
@@ -35,11 +51,7 @@ export const serviceStatus = () => [
       : storageConfigurationError() ||
         'Supabase credentials and storage settings configured. Database access and migrations require verification. Local drafting needs no app account.',
   },
-  {
-    name: 'Website discovery',
-    ready: !!env('FIRECRAWL_API_KEY') && !!env('BROWSERLESS_API_KEY') && env('BROWSERLESS_EGRESS_PROTECTED') === 'true',
-    detail: 'Firecrawl and Browserless credentials plus verified browser network isolation are required for advanced discovery. Basic HTML scans remain available.',
-  },
+  discoveryStatus(),
   {
     name: 'Generation & review',
     ready: !!env('GEMINI_API_KEY'),

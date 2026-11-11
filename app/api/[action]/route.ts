@@ -14,6 +14,7 @@ import {
   rpc,
 } from '@/lib/server/db';
 import { env, required } from '@/lib/server/env';
+import { requireScrapingProvider } from '@/lib/server/context-client';
 import { storageBuckets } from '@/lib/server/storage';
 import { oauthCookie } from '@/lib/server/oauth-browser';
 import { assertRole, contentHash, parseCSV, utcFromLocal } from '@/lib/domain';
@@ -224,10 +225,10 @@ export async function POST(
     if (action === 'scan') {
       editor();
       if (!brandId) throw new PublicRequestError('Select a brand.');
-      required('FIRECRAWL_API_KEY');
+      const scraping = requireScrapingProvider();
       required('GEMINI_API_KEY');
-      required('BROWSERLESS_API_KEY');
-      required('COST_MAP');
+      required(scraping === 'context' ? 'COST_CONTEXT_MAP' : 'COST_MAP');
+      required(scraping === 'context' ? 'COST_CONTEXT_SCRAPE' : 'COST_SCRAPE');
       const { data: b, error } = await db()
         .from('brands')
         .select('website')

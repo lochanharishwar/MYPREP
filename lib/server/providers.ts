@@ -8,6 +8,8 @@ import { normalizeUrl } from '../domain';
 import { assetUrl, storeAsset, rpc } from './db';
 import { sign, validatePublicUrl } from './security';
 import { browserRequestGuard } from './browser-request-guard';
+import { contextDiscover, contextScrape, contextResearch, requireScrapingProvider } from './context-client';
+import { parsePage, observedStyles } from './local-crawl';
 export async function providerJSON<T = Record<string, unknown>>(
   url: string,
   init: RequestInit = {},
@@ -113,6 +115,7 @@ export async function embed(ctx: BillingContext, text: string) {
   return result.embedding.values;
 }
 export async function discover(ctx: BillingContext, url: string) {
+  if (requireScrapingProvider() === 'context') return contextDiscover(ctx, url);
   await validatePublicUrl(url);
   await reserve(ctx, 'MAP');
   const result = await providerJSON<{ links: { url: string }[] }>(
@@ -127,7 +130,7 @@ export async function discover(ctx: BillingContext, url: string) {
     },
   );
   const host = new URL(url).hostname;
-  return [
+  const urls = [
     ...new Set(
       [url, ...(result.links ?? []).map((x) => x.url)].flatMap((u) => {
         try {
@@ -139,6 +142,7 @@ export async function discover(ctx: BillingContext, url: string) {
       }),
     ),
   ];
+  return { urls, partial: (result.links?.length ?? 0) >= 5000 };
 }
 export interface ScrapedPage {
   url: string;
@@ -155,6 +159,7 @@ export async function scrape(
   ctx: BillingContext,
   url: string,
 ): Promise<ScrapedPage> {
+  if (requireScrapingProvider() === 'context') return contextScrape(ctx, url);
   await validatePublicUrl(url);
   await reserve(ctx, 'SCRAPE');
   const response = await providerJSON<{
@@ -219,6 +224,7 @@ export async function styles(
   );
 }
 export async function research(ctx: BillingContext, query: string) {
+  if (requireScrapingProvider() === 'context') return contextResearch(ctx, query);
   await reserve(ctx, 'SEARCH');
   const data = await providerJSON<{
     data: { web?: { url: string; title: string; description: string }[] };
@@ -231,6 +237,20 @@ export async function research(ctx: BillingContext, query: string) {
     body: JSON.stringify({ query, limit: 5 }),
   });
   return data.data?.web ?? [];
+}
+export function htmlStyleFallback(page: ScrapedPage): StyleSnapshot {
+  if (!page.html) throw new Error('No HTML is available for observed identity extraction.');
+  const observed = parsePage(page.html, page.url);
+  const css = observedStyles(observed.css, page.url);
+  return {
+    name: observed.name ?? '', title: observed.title,
+    taglines: observed.tagline ? [observed.tagline] : [],
+    logos: observed.logo ? [observed.logo] : [], fonts: css.fonts,
+    colors: css.colors, headings: observed.headings,
+    description: observed.description, canonical: observed.canonical ?? '',
+    // Embedded declarations are observed facts, not complete computed styles.
+    truncated: true,
+  };
 }
 export async function visualStyleFallback(
   ctx: BillingContext,
