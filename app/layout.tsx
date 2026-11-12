@@ -18,6 +18,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: 'MARKY — Your marketing, in motion',
+  icons: { icon: '/marky-logo.webp', apple: '/marky-logo.png' },
   description:
     'A private workspace for brand intelligence, content, publishing and attribution.',
 };

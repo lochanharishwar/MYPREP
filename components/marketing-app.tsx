@@ -1,6 +1,6 @@
 'use client';
 import { CampaignProgress } from './campaign-progress';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowUpRight,
@@ -13,7 +13,6 @@ import {
   ChartNoAxesCombined,
   Fingerprint,
   Settings2,
-  Waves,
   ScanSearch,
   ShieldCheck,
   MessageCircle,
@@ -33,15 +32,10 @@ import { WorkspaceSettings } from './workspace-settings';
 import { ThinkingIndicator } from './thinking-indicator';
 import { LiquidButton } from './ui/liquid-glass-button';
 import type { OrbState } from 'thinking-orbs';
-import {
-  BrandView,
-  ContentView,
-  ScheduleView,
-  AnalyticsView,
-  InsightsView,
-  DNACard,
-  Dropdown,
-} from './workspace-views';
+import { DNACard, Dropdown } from './workspace-shared';
+import { PageLoadBoundary, WorkspacePage, usePageWarmup } from './workspace-page-loader';
+import { PageLoading } from './page-loading';
+export { Empty } from './empty-state';
 export type Page =
   | 'dashboard'
   | 'brand-dna'
@@ -83,23 +77,6 @@ export const agents = [
   { name: 'Attribution', icon: Network, orb: 'weaving' },
   { name: 'Customer insights', icon: Lightbulb, orb: 'shaping' },
 ] satisfies { name: string; icon: typeof ScanSearch; orb: OrbState }[];
-export function Empty({
-  icon: Icon = Globe2,
-  title,
-  description,
-}: {
-  icon?: typeof Globe2;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="empty-state">
-      <Icon size={36} strokeWidth={1.3} />
-      <h3>{title}</h3>
-      <p>{description}</p>
-    </div>
-  );
-}
 function Dashboard() {
   const w = useWorkspace();
   const [websiteDraft, setWebsiteDraft] = useState({ brandId: '', url: '' });
@@ -393,6 +370,28 @@ function Dashboard() {
 }
 function Shell({ page }: { page: Page }) {
   const w = useWorkspace();
+  const warmPage = usePageWarmup(page, nav);
+  const [destination, setDestination] = useState<string | null>(null);
+  const dock = useRef<HTMLElement>(null);
+  const [highlight, setHighlight] = useState<{ left: number; width: number }>();
+  useEffect(() => { setDestination(null); }, [page]);
+  useEffect(() => {
+    if (!destination) return;
+    const timer = setTimeout(() => setDestination(null), 12000);
+    return () => clearTimeout(timer);
+  }, [destination]);
+  useEffect(() => {
+    const element = dock.current;
+    if (!element) return;
+    const measure = () => {
+      const link = element.querySelector<HTMLElement>(`[data-page="${destination ?? page}"]`);
+      if (link) setHighlight({ left: link.offsetLeft, width: link.offsetWidth });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [page, destination]);
   // Tool handlers are registered once, but always read the current workspace.
   // Registering again on every provider update aborts the previous registration.
   const workspace = useRef(w);
@@ -495,11 +494,9 @@ function Shell({ page }: { page: Page }) {
       <div className="ambient" />
       <header className="topbar">
         <Link href="/" className="wordmark">
-          <span className="mark">
-            <Waves size={23} />
-          </span>
-          MARKY<span className="muted small">/</span>
-          <span className="muted small">
+          <img src="/marky-logo.webp" alt="MARKY" width={2172} height={724} className="app-logo" fetchPriority="high" />
+          <span className="muted small workspace-name">/</span>
+          <span className="muted small workspace-name">
             {w.state.workspace?.name ?? 'Workspace'}
           </span>
         </Link>
@@ -537,15 +534,22 @@ function Shell({ page }: { page: Page }) {
             }
             onClick={() => w.setSettings(true)}
           >
-            {w.session?.user.email?.slice(0, 2).toUpperCase() ?? 'BC'}
+            {w.session?.user.email?.slice(0, 2).toUpperCase() ?? 'M'}
           </button>
         </div>
       </header>
-      <nav className="dock" aria-label="Main navigation">
+      <nav ref={dock} className={`dock ${highlight ? 'has-highlight' : ''}`} aria-label="Main navigation">
+        {highlight && <span aria-hidden="true" className="dock-highlight" style={{ width: highlight.width, transform: `translateX(${highlight.left}px)` }} />}
         {nav.map((n) => (
           <Link
             href={n.path}
+            prefetch={false}
             key={n.id}
+            data-page={n.id}
+            onPointerEnter={() => warmPage(n.id, n.path)}
+            onFocus={() => warmPage(n.id, n.path)}
+            onTouchStart={() => warmPage(n.id, n.path)}
+            onNavigate={() => { if (n.id !== page) { setDestination(n.id); warmPage(n.id, n.path); } }}
             className={page === n.id ? 'selected' : ''}
             aria-current={page === n.id ? 'page' : undefined}
             title={n.label}
@@ -555,9 +559,11 @@ function Shell({ page }: { page: Page }) {
           </Link>
         ))}
       </nav>
+      {destination && <div className="navigation-progress" role="status">Opening {nav.find(n => n.id === destination)?.label}…</div>}
       <main
+        key={page}
         id="main"
-        className={`content ${page === 'content' ? 'studio-page' : ''}`}
+        className={`content page-enter ${page === 'content' ? 'studio-page' : ''}`}
       >
         <div className="page-heading">
           <div>
@@ -604,19 +610,13 @@ function Shell({ page }: { page: Page }) {
             </p>
           )}
         <CampaignProgress />
+        <PageLoadBoundary key={page}><Suspense fallback={<PageLoading label={nav.find(n => n.id === page)?.label} />}>
         {page === 'dashboard' ? (
           <Dashboard />
-        ) : page === 'brand-dna' ? (
-          <BrandView />
-        ) : page === 'content' ? (
-          <ContentView />
-        ) : page === 'schedule' ? (
-          <ScheduleView />
-        ) : page === 'analytics' ? (
-          <AnalyticsView />
         ) : (
-          <InsightsView />
+          <WorkspacePage page={page} />
         )}
+        </Suspense></PageLoadBoundary>
         <ResourcePaging />
       </main>
 
