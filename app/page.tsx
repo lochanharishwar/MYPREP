@@ -1,4 +1,3 @@
-import { MarketingApp } from '@/components/marketing-app';
 export default function Home() {
-  return <MarketingApp page="dashboard" />;
+  return null; // WorkspaceFrame owns the persistent shell and active screen.
 }

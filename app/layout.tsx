@@ -5,6 +5,7 @@ import './brand-identity.css';
 import './studio-refresh.css';
 import './time-controls.css';
 import { WorkspaceProvider } from '@/components/workspace-provider';
+import { WorkspaceFrame } from '@/components/workspace-frame';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -33,7 +34,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <WorkspaceProvider>{children}</WorkspaceProvider>
+        <WorkspaceProvider><WorkspaceFrame>{children}</WorkspaceFrame></WorkspaceProvider>
       </body>
     </html>
   );
