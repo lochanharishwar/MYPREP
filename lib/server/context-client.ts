@@ -6,6 +6,7 @@ import { boundedBytes } from './http';
 import { validatePublicUrl } from './security';
 import { normalizeUrl } from '../domain';
 import { parsePage, safeLink } from './page-observations';
+import { reserveScanCredit } from './scan-ledger';
 
 export function scrapingProvider() {
   const selected = env('SCRAPING_PROVIDER', env('CONTEXT_DEV_API_KEY') ? 'context' : 'firecrawl');
@@ -19,11 +20,12 @@ export function requireScrapingProvider() {
   return provider;
 }
 
-// Every entry point reserves before dispatch. This client is deliberately not
-// called by the anonymous, keyless /api/local/scan endpoint.
+// Every entry point reserves before dispatch: browser scans use the persistent
+// credit ledger, while durable workspace jobs use their workspace spending limit.
 async function request(ctx: BillingContext, operation: 'MAP' | 'SCRAPE' | 'SEARCH', path: string, body?: unknown) {
   const key = required('CONTEXT_DEV_API_KEY');
-  await reserve(ctx, 'CONTEXT_' + operation);
+  if (ctx.creditRunId) await reserveScanCredit(ctx.creditRunId);
+  else await reserve(ctx, 'CONTEXT_' + operation);
   let response: Response;
   try {
     response = await fetch('https://api.context.dev/v1' + path, {

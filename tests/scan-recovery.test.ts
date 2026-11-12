@@ -269,4 +269,15 @@ describe('Accurate website observations and scan recovery', () => {
     ).rejects.toThrow('already read have been saved');
     expect(saved).toHaveBeenCalledWith(result, false);
   });
+  it('continues JSON page batches using the saved run ID and saves each response', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(Response.json({ scan: { queue: ['https://example.com/about'] }, runId: 'saved-run', continueScan: true }))
+      .mockResolvedValueOnce(Response.json({ scan: { queue: [] }, runId: 'saved-run', continueScan: false }));
+    vi.stubGlobal('fetch', fetcher);
+    const saved = vi.fn();
+    await scanWithProgress('https://example.com', saved, 'resume-run');
+    expect(JSON.parse(fetcher.mock.calls[0][1].body).runId).toBe('resume-run');
+    expect(JSON.parse(fetcher.mock.calls[1][1].body).runId).toBe('saved-run');
+    expect(saved.mock.calls.map(call => call[1])).toEqual([false, true]);
+  });
 });

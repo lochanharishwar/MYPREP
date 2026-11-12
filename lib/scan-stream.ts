@@ -5,15 +5,18 @@ import type { ScanResult } from './server/local-crawl';
 export async function scanWithProgress(
   url: string,
   onResult: (result: ScanResult, complete: boolean) => void,
+  resumeId?: string,
 ) {
+  let runId = resumeId;
+  for (let batch = 0; batch < 51; batch++) {
   const response = await fetch('/api/local/scan', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       accept: 'application/x-ndjson',
     },
-    body: JSON.stringify({ url }),
-    signal: AbortSignal.timeout(120000),
+    body: JSON.stringify({ url, runId }),
+    signal: AbortSignal.timeout(180000),
   });
   if (!response.ok) {
     const error = (await response.json().catch(() => ({}))) as {
@@ -24,9 +27,12 @@ export async function scanWithProgress(
     );
   }
   if (!response.headers.get('content-type')?.includes('application/x-ndjson')) {
-    const result = (await response.json()) as ScanResult;
-    onResult(result, true);
-    return result;
+    const result = (await response.json()) as ScanResult & { runId?: string; continueScan?: boolean };
+    onResult(result, !result.continueScan);
+    if (!result.continueScan) return result;
+    if (!result.runId) throw new Error('Scan continuation is missing. Saved results remain available.');
+    runId = result.runId;
+    continue;
   }
   const reader = response.body?.getReader();
   if (!reader) throw new Error('The scan service returned an empty response.');
@@ -70,4 +76,6 @@ export async function scanWithProgress(
     await reader.cancel().catch(() => {});
     reader.releaseLock();
   }
+  }
+  throw new Error('Scan batch limit reached. Saved page summaries remain available.');
 }

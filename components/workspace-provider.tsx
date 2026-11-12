@@ -564,6 +564,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const previousDNA = snapshot().resources.find(
         (r) => r.kind === 'dna' && r.brand_id === brand.id,
       )?.payload as unknown as BrandDNA | undefined;
+      const previousScan = snapshot().resources.find(r => r.kind === 'scan' && r.brand_id === brand.id);
+      const resumeId = previousScan?.payload.runId && Array.isArray(previousScan.payload.queue) && previousScan.payload.queue.length
+        ? String(previousScan.payload.runId) : undefined;
       const scan = create('scan', brand.id, {
         status: 'running',
         url: brand.website,
@@ -619,6 +622,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
                 `Read ${savedPages} ${savedPages === 1 ? 'page' : 'pages'} from ${new URL(brand.website).hostname}. Findings saved; checking more pages…`,
               );
           },
+          resumeId,
         );
         setNotice(
           `Read ${result.dna.coverage.completed} pages from ${new URL(brand.website).hostname}. Your observed Brand DNA is saved; coverage limits are shown below.`,

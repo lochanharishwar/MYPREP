@@ -11,7 +11,7 @@ function discoveryStatus() {
     const missing = [key, ...costs, 'SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'INNGEST_EVENT_KEY', 'INNGEST_SIGNING_KEY', 'GEMINI_API_KEY', 'COST_TEXT'].filter(name => name.startsWith('COST_') ? !(Number(env(name)) > 0 && Number.isFinite(Number(env(name)))) : !env(name));
     return {
       name: 'Website discovery', ready: missing.length === 0,
-      detail: `${context ? 'Context.dev' : 'Firecrawl'} selected${env(key) ? '; key configured' : '; key missing'}. ${missing.length ? 'Advanced scans need: ' + missing.join(', ') + '. ' : 'Server settings configured; access and workspace spending limits are checked when a scan starts. '}Public browser scans remain the free HTML reader. Rendered colors require Browserless; HTML-only styles are labeled partial.`,
+      detail: `${context ? 'Context.dev' : 'Firecrawl'} selected${env(key) ? '; key configured' : '; key missing'}. ${missing.length ? 'Advanced background scans need: ' + missing.join(', ') + '. ' : 'Server settings configured; access and workspace spending limits are checked when a scan starts. '}Browser scans use Context.dev with a persistent credit ledger when its key is selected, otherwise the free HTML reader. Rendered colors require Browserless; HTML-only styles are labeled partial.`,
     };
   } catch {
     return { name: 'Website discovery', ready: false, detail: 'Set SCRAPING_PROVIDER to context or firecrawl. Basic HTML scans remain available.' };
@@ -36,12 +36,13 @@ const hasDatabaseCredentials = () =>
 
 export const serviceStatus = () => [
   {
-    name: 'Basic website scan',
+    name: 'Website page reader',
     ready:
       process.env.NODE_ENV !== 'production' ||
       env('BROWSER_WORKSPACE_MODE') === 'sites',
-    detail:
-      'Public HTML, linked pages and CSS; no API key needed. Coverage is limited and JavaScript is not executed.',
+    detail: env('CONTEXT_DEV_API_KEY') && env('SCRAPING_PROVIDER') !== 'firecrawl'
+      ? 'Context.dev selected. Pages are read one at a time with saved summaries. Limits: 50 credits per website per month and 1,000 total monthly. Hosted use requires the DB credit-ledger migration.'
+      : 'Public HTML, linked pages and CSS; no API key needed. Coverage is limited and JavaScript is not executed.',
   },
   {
     name: 'Server workspace',

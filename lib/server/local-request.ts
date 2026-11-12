@@ -3,7 +3,7 @@ import { boundedBytes } from './http';
 import { env } from './env';
 
 // Bound work within this runtime. This is not a distributed rate limiter or a
-// spending ledger; browser monthly limits still remain advisory.
+// spending ledger. Context scans enforce credits separately in scan-ledger.ts.
 const activeOperations = new Map<string, number>();
 const concurrency = { scan: 2, generation: 1, 'provider-check': 1 } as const;
 export function beginLocalOperation(operation: keyof typeof concurrency) {
@@ -35,8 +35,8 @@ export function assertLocalRequest(
   const hosted = process.env.NODE_ENV === 'production';
   const url = new URL(request.url);
   // Sites enforces its access policy before dispatch, including authorized tool
-  // requests that have no visitor identity. Only the keyless public-web reader
-  // may use that access: it reads no workspace records and dispatches no paid job.
+  // requests that have no visitor identity. Public website reads may use that
+  // access; paid Context calls also require the shared persistent credit ledger.
   const dispatchedRead =
     publicWebsiteRead &&
     !!env('APP_ORIGIN') &&

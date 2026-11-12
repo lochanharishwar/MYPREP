@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { crawlWebsite } from '@/lib/server/local-crawl';
+import { contextScanBatch } from '@/lib/server/context-scan';
+import { env } from '@/lib/server/env';
 import { assertRequestActive, beginLocalOperation, localBody, localFailure } from '@/lib/server/local-request';
 export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
@@ -7,10 +9,13 @@ export async function POST(request: Request) {
   let streaming = false;
   try {
     const input = z
-      .object({ url: z.string().min(1).max(2000) })
+      .object({ url: z.string().min(1).max(2000), runId: z.uuid().optional() })
       .parse(await localBody(request, true));
     assertRequestActive(request);
     release = beginLocalOperation('scan');
+    if (env('CONTEXT_DEV_API_KEY') && env('SCRAPING_PROVIDER') !== 'firecrawl') {
+      return Response.json(await contextScanBatch(input.url, input.runId), { headers: { 'Cache-Control': 'no-store' } });
+    }
     if (request.headers.get('accept')?.includes('application/x-ndjson')) {
       const encoder = new TextEncoder();
       let closed = false;

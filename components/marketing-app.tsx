@@ -87,6 +87,7 @@ function Dashboard() {
     completed: string[];
     failed: string[];
     excluded: string[];
+    queue?: string[];
     error?: string;
     warnings?: string[];
     coverageNote?: string;
@@ -234,6 +235,7 @@ function Dashboard() {
             {scan.payload.coverageNote && (
               <p className="muted small spaced">{scan.payload.coverageNote}</p>
             )}
+            {!!scan.payload.queue?.length && <details className="small spaced"><summary>{scan.payload.queue.length} discovered pages waiting to be read</summary>{scan.payload.queue.map(url => <p className="muted" key={url}>{url}</p>)}</details>}
             {!!scan.payload.warnings?.length && (
               <details className="small spaced">
                 <summary>
@@ -609,7 +611,7 @@ function Shell({ page }: { page: Page }) {
               stored; reports use server data.
             </p>
           )}
-        <CampaignProgress />
+        {page === 'dashboard' && <CampaignProgress />}
         <PageLoadBoundary key={page}><Suspense fallback={<PageLoading label={nav.find(n => n.id === page)?.label} />}>
         {page === 'dashboard' ? (
           <Dashboard />

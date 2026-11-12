@@ -2,6 +2,7 @@ import 'server-only';
 import { required } from './env';
 import { rpc, entity } from './db';
 export interface BillingContext {
+  creditRunId?: string;
   workspaceId: string;
   brandId: string;
   campaignId?: string;

@@ -1,43 +1,46 @@
 # Context.dev scraping in MARKY
 
-Context.dev is a server-only provider for the durable website scan and external
-research workflows. Set `CONTEXT_DEV_API_KEY` and `SCRAPING_PROVIDER=context`.
-No dependency installation is needed. The key is never sent to the target site,
-returned to the browser, or saved with extracted evidence.
+Set server-only `CONTEXT_DEV_API_KEY` and `SCRAPING_PROVIDER=context`.
+The browser never receives the key. With Context selected, `/api/local/scan`
+maps the website then reads one queued page per request. It saves observations,
+extractive page summaries, source links and remaining URLs after each request.
+The browser retains the run ID to resume interrupted scans. Closing the browser
+pauses work; this browser workflow does not claim background execution.
 
-The adapter follows the official [scrape](https://docs.context.dev/api-reference/web-scraping/scrape),
+## Credit limits
+
+The owner approved 50 credits per website and 1,000 total monthly. MARKY applies
+the website limit across repeated runs in the same Indian calendar month.
+Each map or HTML/Markdown scrape reserves one credit atomically before dispatch.
+Failed or ambiguous attempts retain their reservation conservatively. No JSON,
+product extraction, OCR or browser-action options are requested. The limits cover
+this browser workflow, not provider subscriptions or use outside MARKY.
+
+Local development uses ignored `.wrangler/context-scans.sqlite`. Production uses
+the `DB` D1 binding and the generated schema-only migration under `drizzle/`.
+Missing storage fails closed. Public visitors share the owner's finite allowance.
+The existing advanced Supabase workflow has separate workspace dollar budgets
+and requires its server credentials, Inngest and analysis configuration.
+
+## Coverage and recovery
+
+Up to 5,000 same-site URLs are inventoried. External and media links are excluded.
+Every successfully read page receives a summary and evidence; failed and pending
+pages remain visible. Credit, rate-limit and account problems pause the queue.
+Access challenges are reported rather than turned into invented brand facts.
+HTML is parsed inertly. Embedded CSS is observed, not computed; rendered styles
+and inaccessible pages remain explicit coverage limitations.
+
+The adapter uses the official [scrape](https://docs.context.dev/api-reference/web-scraping/scrape),
 [map](https://docs.context.dev/map/overview), and
-[search](https://docs.context.dev/search/overview) APIs. It maps up to 5,000 URLs,
-retrieves full HTML and Markdown, and requests up to five external search results.
-It records page URL, retrieval time, request ID, partial-output status, and reported
-credit usage. It does not request AI-generated brand facts or inferred colors.
-HTML is parsed inertly using the existing identity parser. Missing rendered CSS
-falls back to embedded declarations, explicitly marked partial and not computed.
-
-## Activation
-
-Set positive conservative per-request USD estimates in `COST_CONTEXT_MAP`,
-`COST_CONTEXT_SCRAPE`, and `COST_CONTEXT_SEARCH`, using the account's billing tier.
-The server reserves each estimate atomically before dispatch against the workspace
-limit. Credit receipts are retained as evidence; they are **not** converted into a
-fabricated dollar cost or automatically refunded. Provider subscription billing is
-separate. Failed or ambiguous requests retain the reservation; the client does not
-automatically replay them. Durable workflow retries may start another reserved
-attempt. Review the provider request history before manually retrying a timeout.
-
-The durable path also needs the configured Supabase server workspace, Inngest,
-Gemini analysis settings, and an owner-configured monthly limit. Setting a provider
-key alone does not activate that backend. Service settings show missing prerequisites.
-
-The anonymous `/api/local/scan` endpoint remains a free HTML reader, on localhost
-and on the public site. It never calls Context.dev or consumes this key's credits.
-This prevents public visitors from bypassing the durable spending ledger. No login
-wall has been added to local drafting. Context scans require the secure workflow.
+[credit accounting](https://docs.context.dev/account/credits) contracts.
+It records retrieval time, request ID and reported scrape credit usage when available.
 
 ## Verification
 
-Transport tests cover authentication headers, bounded output, partial responses,
-same-site source validation, failed outputs, map URL deduplication, budget denial,
-provider selection and secret-safe errors. These use mocked responses, not live
-account credits. Paid testing remains disabled; key validity and live extraction
-are not claimed as verified.
+Automated tests exercise queue traversal, summaries, budget denial, account/rate
+failures, persistent reservations and concurrent run exclusion. These tests use
+mocked transport. A separate authorized live test read `https://example.com`,
+returning one completed page, four evidence records and no failed/pending pages.
+It reserved two credits (map plus scrape). The result is saved locally in
+`outputs/context-live-result.json`. No paid image-generation test was run.

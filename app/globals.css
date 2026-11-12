@@ -1546,3 +1546,4 @@ fieldset {
 .journey-steps a:hover,.journey-steps a:focus-visible {border-color:#a2f0dc;outline:2px solid #a2f0dc55;}
 @media(max-width:1000px){.journey-steps{grid-template-columns:repeat(3,minmax(0,1fr));}}
 @media(max-width:560px){.journey-steps{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.journey-steps .journey-mascot { width: 72px; height: 72px; object-fit: contain; margin-bottom: 4px; }
