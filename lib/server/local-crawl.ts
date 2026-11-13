@@ -517,7 +517,7 @@ export function assemble(
       thumbnail: p.page.thumbnail,
       retrieval: p.retrieval,
       summary: {
-        summary: [...new Set([p.page.description, ...p.page.paragraphs].filter(Boolean))].slice(0, 3).join(' ').slice(0, 1200) || p.page.text.slice(0, 900),
+        summary: [...new Set([p.page.description, ...p.page.paragraphs.map(paragraph => paragraph.text)].filter(Boolean))].slice(0, 3).join(' ').slice(0, 1200) || p.page.text.slice(0, 900),
         insights: findings.slice(1),
         seoIssues,
         headings: p.page.headings.slice(0, 8),

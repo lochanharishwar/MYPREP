@@ -16,6 +16,16 @@ beforeEach(() => {
   vi.mocked(contextScrape).mockImplementation(async (_ctx, url) => ({ url, html: `<html><title>Example</title><body><h1>${url}</h1><p>Our tools are made for gardeners and feature replaceable wooden handles.</p></body></html>`, markdown:'Our gardening tools', links:[], metadata:{provider:'context.dev',retrievedAt:'2026-11-12',partial:false} } as any));
 });
 describe('persisted Context page queue', () => {
+  it('summarizes paragraph text from a complete HTML document without serializing observation objects', async () => {
+    vi.mocked(contextScrape).mockResolvedValueOnce({
+      url: 'https://example.com',
+      html: '<!doctype html><html><head><title>Garden tools</title></head><body><main><p>Our tools are made for gardeners and feature replaceable wooden handles.</p><p>Repair guides explain how to replace worn parts and maintain your tools.</p></main></body></html>',
+      markdown: '', links: [], metadata: { provider: 'context.dev', retrievedAt: '2026-11-13', partial: false },
+    } as any);
+    const result = await contextScanBatch('https://example.com');
+    expect(result.pages[0].summary.summary).toBe('Our tools are made for gardeners and feature replaceable wooden handles. Repair guides explain how to replace worn parts and maintain your tools.');
+    expect(result.pages[0].summary.summary).not.toContain('[object Object]');
+  });
   it('reads each discovered page once and retains a summary and evidence for every success', async () => {
     let result = await contextScanBatch('https://example.com');
     expect(result.continueScan).toBe(true);
